@@ -13,7 +13,7 @@ export default defineConfig({
   },
   root: "client",
   build: {
-    outDir: "../dist/public",
+    outDir: "../server/public", // 👈 關鍵修改：改成 server 找得到的地方
     emptyOutDir: true,
   },
 });
