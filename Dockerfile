@@ -1,35 +1,31 @@
-# 使用 Node.js 20 的輕量版作為基底
 FROM node:20-slim
 
-# 1. 安裝 Puppeteer 需要的 Chrome 相關函式庫與中文字型
-RUN apt-get update && apt-get install -y \
-    chromium \
+# 1. 安裝 Chrome 依賴 (這是必要的)
+RUN apt-get update && apt-get install -y chromium \
     fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# 設定環境變數
+# 2. 【關鍵】告訴 Puppeteer 不要下載 Chrome，直接用系統裝好的
+# 這能省下幾百 MB 的空間和記憶體，避免崩潰
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
-# 2. 【關鍵修改】先升級 npm 到最新版，避免舊版 Bug
-RUN npm install -g npm@latest
-
-# 複製 package.json
+# 3. 複製設定檔
 COPY package.json ./
 
-# 3. 安裝套件 (加上除錯指令：如果失敗，就把詳細錯誤印出來給我們看)
-RUN npm install --legacy-peer-deps --no-audit --no-fund || \
-    (echo "❌ 安裝失敗，正在印出錯誤日誌..." && cat /root/.npm/_logs/*-debug-0.log && exit 1)
+# 4. 安裝套件 (移除所有花俏的參數，回歸最簡單的安裝)
+# 這裡不使用 verbose 模式以減少 log 輸出，避免塞爆記憶體
+RUN npm install --legacy-peer-deps
 
-# 複製所有程式碼
+# 5. 複製程式碼
 COPY . .
 
-# 建置前端
+# 6. 建置 (增加記憶體上限設定，防止 build 過程崩潰)
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
 EXPOSE 5000
-
 CMD ["npm", "run", "start"]
