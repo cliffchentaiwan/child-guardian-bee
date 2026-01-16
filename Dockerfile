@@ -17,7 +17,7 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 WORKDIR /app
 
 # 2. 先複製設定檔 (利用 Docker 快取加速安裝)
-COPY package*.json ./
+COPY package.json ./
 
 # 安裝專案套件
 # (使用 --legacy-peer-deps 避免版本衝突，跟你本機一樣)
