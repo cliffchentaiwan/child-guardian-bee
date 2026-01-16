@@ -1,0 +1,22 @@
+{
+  "query": "SELECT COUNT(*) as total, sourceType FROM cases GROUP BY sourceType;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3qv5MLXUtTrnsNC.root --database 7V3UsBg9cTmKKvFT9UiSjS --execute SELECT COUNT(*) as total, sourceType FROM cases GROUP BY sourceType;",
+  "rows": [
+    {
+      "total": "5",
+      "sourceType": "政府公告"
+    },
+    {
+      "total": "13",
+      "sourceType": "媒體報導"
+    },
+    {
+      "total": "6",
+      "sourceType": "社群輿情"
+    }
+  ],
+  "messages": [],
+  "stdout": "total\tsourceType\n5\t政府公告\n13\t媒體報導\n6\t社群輿情\n",
+  "stderr": "",
+  "execution_time_ms": 1607
+}

@@ -1,0 +1,90 @@
+{
+  "query": "SELECT id, maskedName, roleType, sourceType, location, verified FROM cases LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3qv5MLXUtTrnsNC.root --database 7V3UsBg9cTmKKvFT9UiSjS --execute SELECT id, maskedName, roleType, sourceType, location, verified FROM cases LIMIT 10;",
+  "rows": [
+    {
+      "id": "1",
+      "maskedName": "王○明",
+      "roleType": "家教",
+      "sourceType": "媒體報導",
+      "location": "台北市",
+      "verified": "0"
+    },
+    {
+      "id": "2",
+      "maskedName": "陳○華",
+      "roleType": "補習班老師",
+      "sourceType": "政府公告",
+      "location": "新北市",
+      "verified": "1"
+    },
+    {
+      "id": "3",
+      "maskedName": "林○芳",
+      "roleType": "保母",
+      "sourceType": "社群輿情",
+      "location": "台中市",
+      "verified": "0"
+    },
+    {
+      "id": "4",
+      "maskedName": "張○偉",
+      "roleType": "教練",
+      "sourceType": "媒體報導",
+      "location": "高雄市",
+      "verified": "0"
+    },
+    {
+      "id": "5",
+      "maskedName": "李○文",
+      "roleType": "才藝老師",
+      "sourceType": "政府公告",
+      "location": "台北市",
+      "verified": "1"
+    },
+    {
+      "id": "6",
+      "maskedName": "黃○玲",
+      "roleType": "保母",
+      "sourceType": "媒體報導",
+      "location": "桃園市",
+      "verified": "1"
+    },
+    {
+      "id": "7",
+      "maskedName": "吳○豪",
+      "roleType": "學校老師",
+      "sourceType": "社群輿情",
+      "location": "台南市",
+      "verified": "0"
+    },
+    {
+      "id": "8",
+      "maskedName": "周○安",
+      "roleType": "家教",
+      "sourceType": "社群輿情",
+      "location": "新竹市",
+      "verified": "0"
+    },
+    {
+      "id": "9",
+      "maskedName": "鄭○婷",
+      "roleType": "才藝老師",
+      "sourceType": "媒體報導",
+      "location": "台北市",
+      "verified": "0"
+    },
+    {
+      "id": "10",
+      "maskedName": "蔡○宏",
+      "roleType": "教練",
+      "sourceType": "政府公告",
+      "location": "台中市",
+      "verified": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmaskedName\troleType\tsourceType\tlocation\tverified\n1\t王○明\t家教\t媒體報導\t台北市\t0\n2\t陳○華\t補習班老師\t政府公告\t新北市\t1\n3\t林○芳\t保母\t社群輿情\t台中市\t0\n4\t張○偉\t教練\t媒體報導\t高雄市\t0\n5\t李○文\t才藝老師\t政府公告\t台北市\t1\n6\t黃○玲\t保母\t媒體報導\t桃園市\t1\n7\t吳○豪\t學校老師\t社群輿情\t台南市\t0\n8\t周○安\t家教\t社群輿情\t新竹市\t0\n9\t鄭○婷\t才藝老師\t媒體報導\t台北市\t0\n10\t蔡○宏\t教練\t政府公告\t台中市\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1722
+}

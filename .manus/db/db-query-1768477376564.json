@@ -1,0 +1,130 @@
+{
+  "query": "SELECT id, maskedName, sourceType, description FROM cases WHERE maskedName != '未知' LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3qv5MLXUtTrnsNC.root --database 7V3UsBg9cTmKKvFT9UiSjS --execute SELECT id, maskedName, sourceType, description FROM cases WHERE maskedName != '未知' LIMIT 20;",
+  "rows": [
+    {
+      "id": "1",
+      "maskedName": "王○明",
+      "sourceType": "媒體報導",
+      "description": "30歲男性，曾任國中數學家教，被指控對學生有不當肢體接觸行為。"
+    },
+    {
+      "id": "2",
+      "maskedName": "陳○華",
+      "sourceType": "政府公告",
+      "description": "45歲男性，補習班英文老師，經法院判決性侵害罪成立。"
+    },
+    {
+      "id": "3",
+      "maskedName": "林○芳",
+      "sourceType": "社群輿情",
+      "description": "38歲女性，居家保母，被多名家長投訴對幼兒有情緒虐待行為。"
+    },
+    {
+      "id": "4",
+      "maskedName": "張○偉",
+      "sourceType": "媒體報導",
+      "description": "35歲男性，游泳教練，被指控在更衣室偷拍學員。"
+    },
+    {
+      "id": "5",
+      "maskedName": "李○文",
+      "sourceType": "政府公告",
+      "description": "42歲男性，鋼琴老師，經法院判決對未成年學生性侵害罪成立。"
+    },
+    {
+      "id": "6",
+      "maskedName": "黃○玲",
+      "sourceType": "媒體報導",
+      "description": "29歲女性，托嬰中心保育員，監視器拍到對幼兒施暴畫面。"
+    },
+    {
+      "id": "7",
+      "maskedName": "吳○豪",
+      "sourceType": "社群輿情",
+      "description": "50歲男性，國小體育老師，被多名學生投訴言語性騷擾。"
+    },
+    {
+      "id": "8",
+      "maskedName": "周○安",
+      "sourceType": "社群輿情",
+      "description": "28歲男性，高中物理家教，被家長投訴對學生有不當觸碰。"
+    },
+    {
+      "id": "9",
+      "maskedName": "鄭○婷",
+      "sourceType": "媒體報導",
+      "description": "33歲女性，舞蹈老師，被指控對學生有言語霸凌和情緒虐待。"
+    },
+    {
+      "id": "10",
+      "maskedName": "蔡○宏",
+      "sourceType": "政府公告",
+      "description": "48歲男性，籃球教練，經法院判決對多名未成年球員性侵害。"
+    },
+    {
+      "id": "11",
+      "maskedName": "許○傑",
+      "sourceType": "媒體報導",
+      "description": "36歲男性，補習班數學老師，被發現在教室安裝針孔攝影機。"
+    },
+    {
+      "id": "12",
+      "maskedName": "楊○雯",
+      "sourceType": "社群輿情",
+      "description": "31歲女性，居家保母，被指控多次將幼兒獨留在家。"
+    },
+    {
+      "id": "13",
+      "maskedName": "劉○德",
+      "sourceType": "媒體報導",
+      "description": "55歲男性，國中導師，被多名女學生投訴不當觸碰。"
+    },
+    {
+      "id": "14",
+      "maskedName": "謝○翰",
+      "sourceType": "政府公告",
+      "description": "26歲男性，大學生兼職家教，經法院判決對國中女學生性侵害。"
+    },
+    {
+      "id": "15",
+      "maskedName": "洪○琪",
+      "sourceType": "社群輿情",
+      "description": "40歲女性，美術老師，被指控對學生有體罰行為。"
+    },
+    {
+      "id": "16",
+      "maskedName": "郭○銘",
+      "sourceType": "媒體報導",
+      "description": "44歲男性，跆拳道教練，被指控對女學員言語性騷擾。"
+    },
+    {
+      "id": "17",
+      "maskedName": "曾○慧",
+      "sourceType": "媒體報導",
+      "description": "35歲女性，托嬰中心主任，被多名家長投訴對幼兒施暴。"
+    },
+    {
+      "id": "18",
+      "maskedName": "蕭○軒",
+      "sourceType": "政府公告",
+      "description": "38歲男性，補習班國文老師，經法院判決對女學生性侵害。"
+    },
+    {
+      "id": "19",
+      "maskedName": "賴○成",
+      "sourceType": "媒體報導",
+      "description": "47歲男性，高中化學老師，被發現偷拍女學生裙底。"
+    },
+    {
+      "id": "20",
+      "maskedName": "葉○芬",
+      "sourceType": "社群輿情",
+      "description": "42歲女性，居家保母，被投訴對幼兒疏於照顧且有言語暴力。"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmaskedName\tsourceType\tdescription\n1\t王○明\t媒體報導\t30歲男性，曾任國中數學家教，被指控對學生有不當肢體接觸行為。\n2\t陳○華\t政府公告\t45歲男性，補習班英文老師，經法院判決性侵害罪成立。\n3\t林○芳\t社群輿情\t38歲女性，居家保母，被多名家長投訴對幼兒有情緒虐待行為。\n4\t張○偉\t媒體報導\t35歲男性，游泳教練，被指控在更衣室偷拍學員。\n5\t李○文\t政府公告\t42歲男性，鋼琴老師，經法院判決對未成年學生性侵害罪成立。\n6\t黃○玲\t媒體報導\t29歲女性，托嬰中心保育員，監視器拍到對幼兒施暴畫面。\n7\t吳○豪\t社群輿情\t50歲男性，國小體育老師，被多名學生投訴言語性騷擾。\n8\t周○安\t社群輿情\t28歲男性，高中物理家教，被家長投訴對學生有不當觸碰。\n9\t鄭○婷\t媒體報導\t33歲女性，舞蹈老師，被指控對學生有言語霸凌和情緒虐待。\n10\t蔡○宏\t政府公告\t48歲男性，籃球教練，經法院判決對多名未成年球員性侵害。\n11\t許○傑\t媒體報導\t36歲男性，補習班數學老師，被發現在教室安裝針孔攝影機。\n12\t楊○雯\t社群輿情\t31歲女性，居家保母，被指控多次將幼兒獨留在家。\n13\t劉○德\t媒體報導\t55歲男性，國中導師，被多名女學生投訴不當觸碰。\n14\t謝○翰\t政府公告\t26歲男性，大學生兼職家教，經法院判決對國中女學生性侵害。\n15\t洪○琪\t社群輿情\t40歲女性，美術老師，被指控對學生有體罰行為。\n16\t郭○銘\t媒體報導\t44歲男性，跆拳道教練，被指控對女學員言語性騷擾。\n17\t曾○慧\t媒體報導\t35歲女性，托嬰中心主任，被多名家長投訴對幼兒施暴。\n18\t蕭○軒\t政府公告\t38歲男性，補習班國文老師，經法院判決對女學生性侵害。\n19\t賴○成\t媒體報導\t47歲男性，高中化學老師，被發現偷拍女學生裙底。\n20\t葉○芬\t社群輿情\t42歲女性，居家保母，被投訴對幼兒疏於照顧且有言語暴力。\n",
+  "stderr": "",
+  "execution_time_ms": 1557
+}

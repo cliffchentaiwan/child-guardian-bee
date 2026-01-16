@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1768471046061,
+      "tag": "0000_blushing_otto_octavius",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1768471148087,
+      "tag": "0001_optimal_solo",
+      "breakpoints": true
+    }
+  ]
+}

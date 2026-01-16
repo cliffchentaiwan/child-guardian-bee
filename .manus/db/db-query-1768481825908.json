@@ -1,0 +1,27 @@
+{
+  "query": "SHOW CREATE TABLE reports;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3qv5MLXUtTrnsNC.root --database 7V3UsBg9cTmKKvFT9UiSjS --execute SHOW CREATE TABLE reports;",
+  "rows": [
+    {
+      "Table": "reports",
+      "Create Table": "CREATE TABLE `reports` ("
+    }
+  ],
+  "messages": [
+    "  `id` int(11) NOT NULL AUTO_INCREMENT,",
+    "  `suspectName` varchar(100) NOT NULL,",
+    "  `location` varchar(200) DEFAULT NULL,",
+    "  `description` text NOT NULL,",
+    "  `attachments` json DEFAULT NULL,",
+    "  `status` enum('pending','reviewing','approved','rejected') NOT NULL DEFAULT 'pending',",
+    "  `reviewNote` text DEFAULT NULL,",
+    "  `reporterIp` varchar(50) DEFAULT NULL,",
+    "  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin AUTO_INCREMENT=120001"
+  ],
+  "stdout": "Table\tCreate Table\nreports\tCREATE TABLE `reports` (\n  `id` int(11) NOT NULL AUTO_INCREMENT,\n  `suspectName` varchar(100) NOT NULL,\n  `location` varchar(200) DEFAULT NULL,\n  `description` text NOT NULL,\n  `attachments` json DEFAULT NULL,\n  `status` enum('pending','reviewing','approved','rejected') NOT NULL DEFAULT 'pending',\n  `reviewNote` text DEFAULT NULL,\n  `reporterIp` varchar(50) DEFAULT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin AUTO_INCREMENT=120001\n",
+  "stderr": "",
+  "execution_time_ms": 1595
+}

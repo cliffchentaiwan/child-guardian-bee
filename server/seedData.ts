@@ -1,0 +1,280 @@
+/**
+ * 種子資料腳本
+ * 將模擬資料匯入資料庫
+ * 
+ * 執行方式：npx tsx server/seedData.ts
+ */
+
+import { insertCases } from './db';
+import { InsertCase } from '../drizzle/schema';
+
+// 模擬資料（與原本的 mockDatabase.json 相同）
+const mockCases: InsertCase[] = [
+  {
+    maskedName: "王○明",
+    originalName: "王小明",
+    role: "家教",
+    riskTags: ["性騷擾", "不當肢體接觸"],
+    location: "台北市",
+    caseDate: "2024-03-15",
+    description: "30歲男性，曾任國中數學家教，被指控對學生有不當肢體接觸行為。",
+    sourceType: "媒體報導",
+    sourceLink: "https://example.com/news/1",
+    verified: false,
+  },
+  {
+    maskedName: "陳○華",
+    originalName: "陳建華",
+    role: "補習班老師",
+    riskTags: ["性侵害"],
+    location: "新北市",
+    caseDate: "2024-02-20",
+    description: "45歲男性，補習班英文老師，經法院判決性侵害罪成立。",
+    sourceType: "政府公告",
+    sourceLink: "https://example.com/court/1",
+    verified: true,
+    judicialJid: "TPCD-2024-001",
+  },
+  {
+    maskedName: "林○芳",
+    originalName: "林美芳",
+    role: "保母",
+    riskTags: ["情緒虐待", "疏忽照顧"],
+    location: "台中市",
+    caseDate: "2024-01-10",
+    description: "38歲女性，居家保母，被多名家長投訴對幼兒有情緒虐待行為。",
+    sourceType: "社群輿情",
+    sourceLink: "https://example.com/forum/1",
+    verified: false,
+  },
+  {
+    maskedName: "張○偉",
+    originalName: "張志偉",
+    role: "教練",
+    riskTags: ["性騷擾", "偷拍"],
+    location: "高雄市",
+    caseDate: "2023-12-05",
+    description: "35歲男性，游泳教練，被指控在更衣室偷拍學員。",
+    sourceType: "媒體報導",
+    sourceLink: "https://example.com/news/2",
+    verified: false,
+  },
+  {
+    maskedName: "李○文",
+    originalName: "李俊文",
+    role: "才藝老師",
+    riskTags: ["性侵害"],
+    location: "台北市",
+    caseDate: "2023-11-20",
+    description: "42歲男性，鋼琴老師，經法院判決對未成年學生性侵害罪成立。",
+    sourceType: "政府公告",
+    sourceLink: "https://example.com/court/2",
+    verified: true,
+    judicialJid: "TPCD-2023-045",
+  },
+  {
+    maskedName: "黃○玲",
+    originalName: "黃雅玲",
+    role: "保母",
+    riskTags: ["肢體虐待"],
+    location: "桃園市",
+    caseDate: "2023-10-15",
+    description: "29歲女性，托嬰中心保育員，監視器拍到對幼兒施暴畫面。",
+    sourceType: "媒體報導",
+    sourceLink: "https://example.com/news/3",
+    verified: true,
+  },
+  {
+    maskedName: "吳○豪",
+    originalName: "吳俊豪",
+    role: "學校老師",
+    riskTags: ["性騷擾"],
+    location: "台南市",
+    caseDate: "2023-09-08",
+    description: "50歲男性，國小體育老師，被多名學生投訴言語性騷擾。",
+    sourceType: "社群輿情",
+    sourceLink: "https://example.com/forum/2",
+    verified: false,
+  },
+  {
+    maskedName: "周○安",
+    originalName: "周家安",
+    role: "家教",
+    riskTags: ["不當肢體接觸"],
+    location: "新竹市",
+    caseDate: "2023-08-22",
+    description: "28歲男性，高中物理家教，被家長投訴對學生有不當觸碰。",
+    sourceType: "社群輿情",
+    sourceLink: "https://example.com/forum/3",
+    verified: false,
+  },
+  {
+    maskedName: "鄭○婷",
+    originalName: "鄭雅婷",
+    role: "才藝老師",
+    riskTags: ["情緒虐待"],
+    location: "台北市",
+    caseDate: "2023-07-18",
+    description: "33歲女性，舞蹈老師，被指控對學生有言語霸凌和情緒虐待。",
+    sourceType: "媒體報導",
+    sourceLink: "https://example.com/news/4",
+    verified: false,
+  },
+  {
+    maskedName: "蔡○宏",
+    originalName: "蔡志宏",
+    role: "教練",
+    riskTags: ["性侵害", "性騷擾"],
+    location: "台中市",
+    caseDate: "2023-06-30",
+    description: "48歲男性，籃球教練，經法院判決對多名未成年球員性侵害。",
+    sourceType: "政府公告",
+    sourceLink: "https://example.com/court/3",
+    verified: true,
+    judicialJid: "TCHD-2023-078",
+  },
+  {
+    maskedName: "許○傑",
+    originalName: "許明傑",
+    role: "補習班老師",
+    riskTags: ["偷拍"],
+    location: "新北市",
+    caseDate: "2023-05-25",
+    description: "36歲男性，補習班數學老師，被發現在教室安裝針孔攝影機。",
+    sourceType: "媒體報導",
+    sourceLink: "https://example.com/news/5",
+    verified: true,
+  },
+  {
+    maskedName: "楊○雯",
+    originalName: "楊佳雯",
+    role: "保母",
+    riskTags: ["疏忽照顧"],
+    location: "高雄市",
+    caseDate: "2023-04-12",
+    description: "31歲女性，居家保母，被指控多次將幼兒獨留在家。",
+    sourceType: "社群輿情",
+    sourceLink: "https://example.com/forum/4",
+    verified: false,
+  },
+  {
+    maskedName: "劉○德",
+    originalName: "劉建德",
+    role: "學校老師",
+    riskTags: ["性騷擾", "不當肢體接觸"],
+    location: "彰化縣",
+    caseDate: "2023-03-08",
+    description: "55歲男性，國中導師，被多名女學生投訴不當觸碰。",
+    sourceType: "媒體報導",
+    sourceLink: "https://example.com/news/6",
+    verified: false,
+  },
+  {
+    maskedName: "謝○翰",
+    originalName: "謝宗翰",
+    role: "家教",
+    riskTags: ["性侵害"],
+    location: "台北市",
+    caseDate: "2023-02-14",
+    description: "26歲男性，大學生兼職家教，經法院判決對國中女學生性侵害。",
+    sourceType: "政府公告",
+    sourceLink: "https://example.com/court/4",
+    verified: true,
+    judicialJid: "TPCD-2023-012",
+  },
+  {
+    maskedName: "洪○琪",
+    originalName: "洪雅琪",
+    role: "才藝老師",
+    riskTags: ["肢體虐待"],
+    location: "台南市",
+    caseDate: "2023-01-20",
+    description: "40歲女性，美術老師，被指控對學生有體罰行為。",
+    sourceType: "社群輿情",
+    sourceLink: "https://example.com/forum/5",
+    verified: false,
+  },
+  {
+    maskedName: "郭○銘",
+    originalName: "郭俊銘",
+    role: "教練",
+    riskTags: ["性騷擾"],
+    location: "新北市",
+    caseDate: "2022-12-10",
+    description: "44歲男性，跆拳道教練，被指控對女學員言語性騷擾。",
+    sourceType: "媒體報導",
+    sourceLink: "https://example.com/news/7",
+    verified: false,
+  },
+  {
+    maskedName: "曾○慧",
+    originalName: "曾淑慧",
+    role: "保母",
+    riskTags: ["情緒虐待", "肢體虐待"],
+    location: "桃園市",
+    caseDate: "2022-11-05",
+    description: "35歲女性，托嬰中心主任，被多名家長投訴對幼兒施暴。",
+    sourceType: "媒體報導",
+    sourceLink: "https://example.com/news/8",
+    verified: true,
+  },
+  {
+    maskedName: "蕭○軒",
+    originalName: "蕭志軒",
+    role: "補習班老師",
+    riskTags: ["性侵害"],
+    location: "台中市",
+    caseDate: "2022-10-18",
+    description: "38歲男性，補習班國文老師，經法院判決對女學生性侵害。",
+    sourceType: "政府公告",
+    sourceLink: "https://example.com/court/5",
+    verified: true,
+    judicialJid: "TCHD-2022-156",
+  },
+  {
+    maskedName: "賴○成",
+    originalName: "賴俊成",
+    role: "學校老師",
+    riskTags: ["偷拍", "性騷擾"],
+    location: "高雄市",
+    caseDate: "2022-09-22",
+    description: "47歲男性，高中化學老師，被發現偷拍女學生裙底。",
+    sourceType: "媒體報導",
+    sourceLink: "https://example.com/news/9",
+    verified: true,
+  },
+  {
+    maskedName: "葉○芬",
+    originalName: "葉秀芬",
+    role: "保母",
+    riskTags: ["疏忽照顧", "情緒虐待"],
+    location: "新竹縣",
+    caseDate: "2022-08-15",
+    description: "42歲女性，居家保母，被投訴對幼兒疏於照顧且有言語暴力。",
+    sourceType: "社群輿情",
+    sourceLink: "https://example.com/forum/6",
+    verified: false,
+  },
+];
+
+async function seedDatabase() {
+  console.log('開始匯入種子資料...');
+  
+  try {
+    await insertCases(mockCases);
+    console.log(`成功匯入 ${mockCases.length} 筆案例資料`);
+  } catch (error) {
+    console.error('匯入失敗:', error);
+    process.exit(1);
+  }
+  
+  process.exit(0);
+}
+
+// 如果直接執行此檔案
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  seedDatabase();
+}
+
+export { mockCases, seedDatabase };
