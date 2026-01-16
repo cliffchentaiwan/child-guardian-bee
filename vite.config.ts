@@ -13,7 +13,8 @@ export default defineConfig({
   },
   root: "client",
   build: {
-    outDir: "../server/public", // 👈 關鍵修改：改成 server 找得到的地方
+    // 👇 使用 path.resolve 鎖定絕對路徑，保證準確！
+    outDir: path.resolve(__dirname, "server/public"),
     emptyOutDir: true,
   },
 });
