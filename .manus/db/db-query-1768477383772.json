@@ -1,0 +1,70 @@
+{
+  "query": "SELECT id, maskedName, sourceType, description FROM cases WHERE sourceType = '媒體報導' LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3qv5MLXUtTrnsNC.root --database 7V3UsBg9cTmKKvFT9UiSjS --execute SELECT id, maskedName, sourceType, description FROM cases WHERE sourceType = '媒體報導' LIMIT 10;",
+  "rows": [
+    {
+      "id": "1",
+      "maskedName": "王○明",
+      "sourceType": "媒體報導",
+      "description": "30歲男性，曾任國中數學家教，被指控對學生有不當肢體接觸行為。"
+    },
+    {
+      "id": "4",
+      "maskedName": "張○偉",
+      "sourceType": "媒體報導",
+      "description": "35歲男性，游泳教練，被指控在更衣室偷拍學員。"
+    },
+    {
+      "id": "6",
+      "maskedName": "黃○玲",
+      "sourceType": "媒體報導",
+      "description": "29歲女性，托嬰中心保育員，監視器拍到對幼兒施暴畫面。"
+    },
+    {
+      "id": "9",
+      "maskedName": "鄭○婷",
+      "sourceType": "媒體報導",
+      "description": "33歲女性，舞蹈老師，被指控對學生有言語霸凌和情緒虐待。"
+    },
+    {
+      "id": "11",
+      "maskedName": "許○傑",
+      "sourceType": "媒體報導",
+      "description": "36歲男性，補習班數學老師，被發現在教室安裝針孔攝影機。"
+    },
+    {
+      "id": "13",
+      "maskedName": "劉○德",
+      "sourceType": "媒體報導",
+      "description": "55歲男性，國中導師，被多名女學生投訴不當觸碰。"
+    },
+    {
+      "id": "16",
+      "maskedName": "郭○銘",
+      "sourceType": "媒體報導",
+      "description": "44歲男性，跆拳道教練，被指控對女學員言語性騷擾。"
+    },
+    {
+      "id": "17",
+      "maskedName": "曾○慧",
+      "sourceType": "媒體報導",
+      "description": "35歲女性，托嬰中心主任，被多名家長投訴對幼兒施暴。"
+    },
+    {
+      "id": "19",
+      "maskedName": "賴○成",
+      "sourceType": "媒體報導",
+      "description": "47歲男性，高中化學老師，被發現偷拍女學生裙底。"
+    },
+    {
+      "id": "30001",
+      "maskedName": "未知",
+      "sourceType": "媒體報導",
+      "description": "屏東變態哥哥竟對妹妹伸狼爪 父撞見大怒逮人送警所"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmaskedName\tsourceType\tdescription\n1\t王○明\t媒體報導\t30歲男性，曾任國中數學家教，被指控對學生有不當肢體接觸行為。\n4\t張○偉\t媒體報導\t35歲男性，游泳教練，被指控在更衣室偷拍學員。\n6\t黃○玲\t媒體報導\t29歲女性，托嬰中心保育員，監視器拍到對幼兒施暴畫面。\n9\t鄭○婷\t媒體報導\t33歲女性，舞蹈老師，被指控對學生有言語霸凌和情緒虐待。\n11\t許○傑\t媒體報導\t36歲男性，補習班數學老師，被發現在教室安裝針孔攝影機。\n13\t劉○德\t媒體報導\t55歲男性，國中導師，被多名女學生投訴不當觸碰。\n16\t郭○銘\t媒體報導\t44歲男性，跆拳道教練，被指控對女學員言語性騷擾。\n17\t曾○慧\t媒體報導\t35歲女性，托嬰中心主任，被多名家長投訴對幼兒施暴。\n19\t賴○成\t媒體報導\t47歲男性，高中化學老師，被發現偷拍女學生裙底。\n30001\t未知\t媒體報導\t屏東變態哥哥竟對妹妹伸狼爪 父撞見大怒逮人送警所\n",
+  "stderr": "",
+  "execution_time_ms": 1557
+}

@@ -1,0 +1,35 @@
+{
+  "query": "SELECT id, maskedName, location FROM cases WHERE location IS NULL OR location = '' OR TRIM(location) = '';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3qv5MLXUtTrnsNC.root --database 7V3UsBg9cTmKKvFT9UiSjS --execute SELECT id, maskedName, location FROM cases WHERE location IS NULL OR location = '' OR TRIM(location) = '';",
+  "rows": [
+    {
+      "id": "30005",
+      "maskedName": "未知",
+      "location": ""
+    },
+    {
+      "id": "30006",
+      "maskedName": "吳○○子",
+      "location": ""
+    },
+    {
+      "id": "30007",
+      "maskedName": "未知",
+      "location": ""
+    },
+    {
+      "id": "30008",
+      "maskedName": "未知",
+      "location": ""
+    },
+    {
+      "id": "30009",
+      "maskedName": "未知",
+      "location": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmaskedName\tlocation\n30005\t未知\t\n30006\t吳○○子\t\n30007\t未知\t\n30008\t未知\t\n30009\t未知\t\n",
+  "stderr": "",
+  "execution_time_ms": 1583
+}

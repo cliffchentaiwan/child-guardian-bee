@@ -1,0 +1,70 @@
+{
+  "query": "SELECT * FROM reports ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3qv5MLXUtTrnsNC.root --database 7V3UsBg9cTmKKvFT9UiSjS --execute SELECT * FROM reports ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "90006",
+      "suspectName": "測試人員",
+      "location": "台北市",
+      "description": "這是一個測試通報，描述需要至少十個字以上才能送出",
+      "attachments": "[]",
+      "status": "pending",
+      "reviewNote": "NULL",
+      "reporterIp": "::ffff:127.0.0.1",
+      "createdAt": "2026-01-15 12:57:35",
+      "updatedAt": "2026-01-15 12:57:35"
+    },
+    {
+      "id": "90005",
+      "suspectName": "測試人員",
+      "location": "測試地點",
+      "description": "這是一個測試通報，用於驗證系統功能是否正常運作。",
+      "attachments": "NULL",
+      "status": "pending",
+      "reviewNote": "NULL",
+      "reporterIp": "127.0.0.1",
+      "createdAt": "2026-01-15 12:48:00",
+      "updatedAt": "2026-01-15 12:48:00"
+    },
+    {
+      "id": "90004",
+      "suspectName": "測試人員",
+      "location": "測試地點",
+      "description": "這是一個測試通報，用於驗證系統功能是否正常運作。",
+      "attachments": "NULL",
+      "status": "pending",
+      "reviewNote": "NULL",
+      "reporterIp": "127.0.0.1",
+      "createdAt": "2026-01-15 12:38:59",
+      "updatedAt": "2026-01-15 12:38:59"
+    },
+    {
+      "id": "90003",
+      "suspectName": "測試人員",
+      "location": "測試地點",
+      "description": "這是一個測試通報，用於驗證系統功能是否正常運作。",
+      "attachments": "NULL",
+      "status": "pending",
+      "reviewNote": "NULL",
+      "reporterIp": "127.0.0.1",
+      "createdAt": "2026-01-15 12:36:48",
+      "updatedAt": "2026-01-15 12:36:48"
+    },
+    {
+      "id": "90002",
+      "suspectName": "測試人員",
+      "location": "測試地點",
+      "description": "這是一個測試通報，用於驗證系統功能是否正常運作。",
+      "attachments": "NULL",
+      "status": "pending",
+      "reviewNote": "NULL",
+      "reporterIp": "127.0.0.1",
+      "createdAt": "2026-01-15 12:36:25",
+      "updatedAt": "2026-01-15 12:36:25"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsuspectName\tlocation\tdescription\tattachments\tstatus\treviewNote\treporterIp\tcreatedAt\tupdatedAt\n90006\t測試人員\t台北市\t這是一個測試通報，描述需要至少十個字以上才能送出\t[]\tpending\tNULL\t::ffff:127.0.0.1\t2026-01-15 12:57:35\t2026-01-15 12:57:35\n90005\t測試人員\t測試地點\t這是一個測試通報，用於驗證系統功能是否正常運作。\tNULL\tpending\tNULL\t127.0.0.1\t2026-01-15 12:48:00\t2026-01-15 12:48:00\n90004\t測試人員\t測試地點\t這是一個測試通報，用於驗證系統功能是否正常運作。\tNULL\tpending\tNULL\t127.0.0.1\t2026-01-15 12:38:59\t2026-01-15 12:38:59\n90003\t測試人員\t測試地點\t這是一個測試通報，用於驗證系統功能是否正常運作。\tNULL\tpending\tNULL\t127.0.0.1\t2026-01-15 12:36:48\t2026-01-15 12:36:48\n90002\t測試人員\t測試地點\t這是一個測試通報，用於驗證系統功能是否正常運作。\tNULL\tpending\tNULL\t127.0.0.1\t2026-01-15 12:36:25\t2026-01-15 12:36:25\n",
+  "stderr": "",
+  "execution_time_ms": 1569
+}

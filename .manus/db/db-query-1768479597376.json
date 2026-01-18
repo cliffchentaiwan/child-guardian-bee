@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE cases SET location = '未知' WHERE location IS NULL OR location = '' OR TRIM(location) = '';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3qv5MLXUtTrnsNC.root --database 7V3UsBg9cTmKKvFT9UiSjS --execute UPDATE cases SET location = '未知' WHERE location IS NULL OR location = '' OR TRIM(location) = '';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1712
+}
