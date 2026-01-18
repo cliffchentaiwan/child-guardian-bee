@@ -292,7 +292,7 @@ export const appRouter = router({
       .input(z.object({
         source: z.enum(['judicial', 'news', 'gov', 'kindyinfo', 'crc', 'all']),
       }))
-      .mutation(async ({ input }) => { // 修正處：只解構 input，不拿 ctx
+      .mutation(async ({ input }) => { 
         
         if (input.source === 'judicial' || input.source === 'all') {
           // 檢查服務時間
@@ -556,3 +556,25 @@ export const appRouter = router({
         recordsAdded: result.childRelated,
         errorMessage: result.error,
       });
+
+      return {
+        success: result.success,
+        message: result.success
+          ? `AI 新聞同步完成：抓取 ${result.synced} 則，AI 處理 ${result.aiProcessed} 則，新增 ${result.childRelated} 筆`
+          : result.error || '同步失敗',
+      };
+    }),
+  }),
+
+  // 政府資料來源 API
+  gov: router({
+    /**
+     * 取得政府資料來源狀態
+     */
+    status: publicProcedure.query(() => {
+      return govDataScraper.getGovDataSourcesStatus();
+    }),
+  }),
+});
+
+export type AppRouter = typeof appRouter;
