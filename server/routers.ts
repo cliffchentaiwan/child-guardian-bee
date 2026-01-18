@@ -273,7 +273,7 @@ export const appRouter = router({
     }),
   }),
 
-  // 資料同步相關 API（僅管理員）
+  // 資料同步相關 API（公開觸發版）
   sync: router({
     /**
      * 取得同步記錄
@@ -286,16 +286,13 @@ export const appRouter = router({
     }),
 
     /**
-     * 手動觸發同步（預留給未來實作）
+     * 手動觸發同步 (已移除管理員檢查，任何人都能觸發)
      */
-    trigger: protectedProcedure
+    trigger: publicProcedure
       .input(z.object({
         source: z.enum(['judicial', 'news', 'gov', 'kindyinfo', 'crc', 'all']),
       }))
-      .mutation(async ({ input, ctx }) => {
-        if (ctx.user.role !== 'admin') {
-          throw new Error("權限不足");
-        }
+      .mutation(async ({ input }) => { // 修正處：只解構 input，不拿 ctx
         
         if (input.source === 'judicial' || input.source === 'all') {
           // 檢查服務時間
@@ -559,25 +556,3 @@ export const appRouter = router({
         recordsAdded: result.childRelated,
         errorMessage: result.error,
       });
-
-      return {
-        success: result.success,
-        message: result.success
-          ? `AI 新聞同步完成：抓取 ${result.synced} 則，AI 處理 ${result.aiProcessed} 則，新增 ${result.childRelated} 筆`
-          : result.error || '同步失敗',
-      };
-    }),
-  }),
-
-  // 政府資料來源 API
-  gov: router({
-    /**
-     * 取得政府資料來源狀態
-     */
-    status: publicProcedure.query(() => {
-      return govDataScraper.getGovDataSourcesStatus();
-    }),
-  }),
-});
-
-export type AppRouter = typeof appRouter;
