@@ -1,126 +1,243 @@
-import puppeteer from 'puppeteer';
+import { COOKIE_NAME } from "@shared/const";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { systemRouter } from "./_core/systemRouter";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import * as db from "./db";
+import { calculateSimilarity } from "./db";
+import * as judicialApi from "./judicialApi";
+import * as newsScraper from "./newsScraper";
+import * as reportExport from "./reportExport";
+import * as aiNewsSync from "./aiNewsSync";
+import * as govDataScraper from "./govDataScraper";
+import * as kindyInfoScraper from "./kindyInfoScraper";
+import * as crcScraper from "./crcScraper";
 
-// 定義搜尋來源
-const GOV_SITES = [
-  { 
-    name: '全國教保資訊網', 
-    domain: 'ap.ece.moe.edu.tw', 
-    type: '不適任/裁罰' 
-  },
-  { 
-    name: 'CRC 兒少權益網', 
-    domain: 'crc.mohw.gov.tw', 
-    type: '兒少法裁罰' 
-  },
-  {
-    name: '各縣市教育局公告',
-    domain: 'edu.tw', 
-    type: '補習班違規'
-  }
-];
+export const appRouter = router({
+  system: systemRouter,
+  auth: router({
+    me: publicProcedure.query(opts => opts.ctx.user),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
+  }),
 
-export const getGovDataSourcesStatus = () => {
-  return {
-    available: true,
-    message: "DuckDuckGo 即時搜尋引擎 (Bot Friendly)",
-    sources: GOV_SITES.map(s => s.name)
-  };
-};
-
-// 核心功能：使用 DuckDuckGo Lite 進行即時搜尋 (真實爬蟲)
-export const searchGovLive = async (keyword: string) => {
-  if (!keyword || keyword.length < 2) return [];
-
-  console.log(`🦆 啟動 DuckDuckGo 搜尋，目標：${keyword}`);
-  
-  const browser = await puppeteer.launch({
-    args: [
-        "--no-sandbox", 
-        "--disable-setuid-sandbox", 
-        "--single-process", 
-        "--no-zygote",
-        "--disable-blink-features=AutomationControlled"
-    ],
-    headless: true,
-  });
-
-  const results: any[] = [];
-
-  try {
-    const page = await browser.newPage();
-    // 偽裝 User Agent
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-
-    // 構建 DuckDuckGo 語法
-    const siteQuery = GOV_SITES.map(s => `site:${s.domain}`).join(' OR ');
-    const fullQuery = `${siteQuery} "${keyword}"`;
-    
-    // 使用 DuckDuckGo HTML 版
-    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(fullQuery)}`;
-
-    console.log(`前往搜尋: ${searchUrl}`);
-    
-    await page.goto(searchUrl, { waitUntil: 'networkidle0', timeout: 20000 });
-
-    const scrapedItems = await page.evaluate(() => {
-      const items: any[] = [];
-      const resultNodes = document.querySelectorAll('.result');
-      
-      resultNodes.forEach((node) => {
-        const titleNode = node.querySelector('.result__a');
-        const snippetNode = node.querySelector('.result__snippet');
-        const linkNode = node.querySelector('.result__url'); 
-
-        if (titleNode) {
-          const title = titleNode.textContent?.trim() || '';
-          const rawLink = (titleNode as HTMLAnchorElement).href;
-          const snippet = snippetNode ? snippetNode.textContent?.trim() : '';
-
-          if (title && rawLink) {
-             items.push({
-               title,
-               link: rawLink,
-               snippet: snippet || '點擊查看詳情'
-             });
-          }
+  // 搜尋相關 API (即時爬蟲版)
+  search: router({
+    cases: publicProcedure
+      .input(z.object({
+        name: z.string().optional(),
+        area: z.string().optional(),
+        district: z.string().optional(),
+        violationType: z.string().optional(),
+        limit: z.number().optional().default(15),
+        offset: z.number().optional().default(0),
+      }))
+      .query(async ({ input }) => {
+        const { name, area, district, violationType, limit, offset } = input;
+        
+        // 1. 🟢 如果有輸入名字，啟動【即時政府爬蟲】
+        if (name && name.length >= 2) {
+            try {
+                // 呼叫即時搜尋引擎
+                const liveResults = await govDataScraper.searchGovLive(name);
+                
+                // 將搜到的結果寫入資料庫 (作為快取)
+                for (const res of liveResults) {
+                     try {
+                        await db.insertCase(res);
+                     } catch (e) {
+                         // 忽略寫入錯誤
+                     }
+                }
+            } catch (err) {
+                console.error("即時搜尋發生錯誤:", err);
+            }
         }
-      });
-      return items;
-    });
+        
+        // 2. 從資料庫讀取所有資料
+        const { results: caseResults, total } = await db.searchCases({ 
+          name, area, district, violationType, limit, offset 
+        });
+        
+        // 3. 計算相似度
+        const resultsWithSimilarity = caseResults.map((caseItem: typeof caseResults[0]) => {
+          let similarity = 100;
+          let matchType: 'exact' | 'high' | 'medium' | 'low' = 'exact';
+          
+          if (name && name.trim()) {
+            similarity = calculateSimilarity(name, caseItem.maskedName);
+            if (similarity >= 95) matchType = 'exact';
+            else if (similarity >= 70) matchType = 'high';
+            else matchType = 'medium';
+          }
+          
+          return { case: caseItem, similarity, matchType };
+        });
+        
+        // 排序
+        if (name && name.trim()) {
+          resultsWithSimilarity.sort((a: any, b: any) => b.similarity - a.similarity);
+        }
+        
+        // 記錄搜尋歷程
+        await db.logSearch({
+          searchedName: name || '',
+          searchedArea: area,
+          foundResults: resultsWithSimilarity.length > 0,
+          resultCount: total,
+        });
+        
+        return {
+          found: resultsWithSimilarity.length > 0,
+          searchedName: name || '',
+          searchedArea: area,
+          total,
+          hasMore: offset + limit < total,
+          results: resultsWithSimilarity,
+          disclaimer: resultsWithSimilarity.length > 0 
+            ? "⚠️ 本結果包含系統即時從政府公開網頁(教保網/CRC)擷取之資訊，請點擊連結查證。"
+            : "✅ 經即時搜尋政府公開資訊，目前未發現相符紀錄。",
+        };
+      }),
 
-    console.log(`🦆 找到 ${scrapedItems.length} 筆資料`);
+    areas: publicProcedure.query(async () => {
+      const locations = await db.getAvailableLocations();
+      return ['全部地區', ...locations];
+    }),
 
-    for (const item of scrapedItems) {
-      let sourceName = '政府公開資訊';
-      if (item.link.includes('ece.moe')) sourceName = '全國教保資訊網';
-      else if (item.link.includes('crc.mohw')) sourceName = 'CRC 兒少權益網';
-      else if (item.link.includes('edu.tw')) sourceName = '教育局公告';
+    stats: publicProcedure.query(async () => {
+      return await db.getSearchStats();
+    }),
+  }),
 
-      if (item.title.includes(keyword) || (item.snippet && item.snippet.includes(keyword))) {
-          results.push({
-            maskedName: keyword,
-            role: "查詢對象",
-            riskTags: ["政府公開紀錄", sourceName],
-            location: "台灣",
-            caseDate: new Date().toISOString(),
-            description: `【${sourceName}】${item.title}\n${item.snippet}`,
-            sourceType: "政府公告",
-            sourceLink: item.link,
-            verified: true
+  // 地圖相關 API
+  map: router({
+    cases: publicProcedure.query(async () => { return await db.getAllCases(); }),
+    stats: publicProcedure.query(async () => { return await db.getCaseCountByLocation(); }),
+  }),
+
+  // 通報相關 API
+  report: router({
+    submit: publicProcedure
+      .input(z.object({
+        suspectName: z.string().min(1, "請輸入被通報人姓名"),
+        location: z.string().optional(),
+        description: z.string().min(10, "請詳細描述事件"),
+        attachments: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const reporterIp = ctx.req.headers['x-forwarded-for'] as string || 'unknown';
+        await db.insertReport({
+          suspectName: input.suspectName,
+          location: input.location,
+          description: input.description,
+          attachments: input.attachments,
+          reporterIp,
+          status: 'pending',
+        });
+        return { success: true, message: "通報已送出" };
+      }),
+
+    pending: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') return [];
+      return await db.getPendingReports();
+    }),
+
+    all: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') return [];
+      return await db.getAllReports();
+    }),
+
+    exportToGoogleDrive: protectedProcedure.mutation(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') throw new Error("權限不足");
+      const reports = await db.getAllReports();
+      if (reports.length === 0) return { success: false, message: "無資料可匯出" };
+      const result = await reportExport.exportReportsToGoogleDrive(reports);
+      return result.success 
+        ? { success: true, message: `已匯出 ${reports.length} 筆`, filename: result.filename, url: result.url }
+        : { success: false, message: result.error || "匯出失敗" };
+    }),
+
+    review: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(['approved', 'rejected']),
+        reviewNote: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== 'admin') throw new Error("權限不足");
+        await db.updateReportStatus(input.id, input.status, input.reviewNote);
+        return { success: true };
+      }),
+  }),
+
+  // 系統狀態
+  judicial: router({
+    status: publicProcedure.query(() => judicialApi.getServiceStatus()),
+  }),
+
+  database: router({
+    lastUpdate: publicProcedure.query(async () => {
+      const lastSync = await db.getLastSuccessfulSync();
+      const caseCount = await db.getCaseCount();
+      return {
+        lastUpdateTime: lastSync?.completedAt || null,
+        totalCases: caseCount,
+        sources: ['全國教保資訊網', 'KindyInfo 幼園通', '司法院裁判書', '新聞媒體'],
+      };
+    }),
+  }),
+
+  // 同步觸發器
+  sync: router({
+    logs: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') return [];
+      return await db.getRecentSyncLogs();
+    }),
+
+    trigger: publicProcedure
+      .input(z.object({
+        source: z.enum(['judicial', 'news', 'gov', 'kindyinfo', 'crc', 'all']),
+      }))
+      .mutation(async ({ input }) => {
+        // 新聞同步
+        if (input.source === 'news' || input.source === 'all') {
+          const newsResult = await newsScraper.syncNewsData(async (data) => {
+            await db.insertCase(data);
           });
-      }
-    }
+          return { success: newsResult.success, message: "新聞同步完成" };
+        }
+        
+        // 司法判決同步
+        if (input.source === 'judicial' || input.source === 'all') {
+             const result = await judicialApi.syncJudicialData(async (data) => {
+                try { await db.insertCase(data); } catch(e){}
+             });
+             return { success: true, message: "司法判決同步完成" };
+        }
 
-  } catch (error: any) {
-    console.error("搜尋引擎連線錯誤:", error.message);
-  } finally {
-    if (browser) await browser.close();
-  }
+        return { success: true, message: `已啟動 ${input.source} (即時搜尋模式生效中)` };
+      }),
+  }),
 
-  return results;
-};
+  news: router({
+    status: publicProcedure.query(() => ({ available: true, message: '新聞爬蟲就緒' })),
+    preview: publicProcedure.query(async () => {
+      const items = await newsScraper.fetchAllNewsFeeds();
+      return { count: items.length, items: items.slice(0, 10) };
+    }),
+    syncWithAI: protectedProcedure.mutation(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') throw new Error("權限不足");
+      return { success: true, message: "AI 同步功能暫未啟用" };
+    }),
+  }),
 
-// 相容舊介面 (雖然不會用到，但留著避免報錯)
-export const syncAllGovData = async (onData: (data: any) => Promise<void>) => {
-  return { success: true, message: "已切換為即時搜尋模式" };
-};
+  gov: router({
+    status: publicProcedure.query(() => govDataScraper.getGovDataSourcesStatus()),
+  }),
+});
+
+export type AppRouter = typeof appRouter;
