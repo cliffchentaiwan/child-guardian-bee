@@ -79,7 +79,8 @@ export default function Home() {
     const hasArea = selectedArea !== '全部地區';
     
     if (!hasName && !hasArea) {
-      // 如果什麼都沒選，顯示最新資料
+      // 如果什麼都沒選，不做動作
+      return;
     }
     
     setHasSearched(true);
@@ -110,8 +111,6 @@ export default function Home() {
       handleSearch();
     }
   };
-
-
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -243,9 +242,8 @@ export default function Home() {
                   </span>
                 </div>
 
-                {/* Data Sources Status */}
+                {/* Data Sources Status (已簡化：只保留綠色更新狀態) */}
                 <div className="flex flex-col items-center gap-2 mt-3 text-xs">
-                  {/* Database Last Update */}
                   {dbStatus && (
                     <div className="flex items-center gap-2 text-safe-green">
                       <span className="w-2 h-2 rounded-full bg-safe-green" />
@@ -253,18 +251,10 @@ export default function Home() {
                         資料庫更新：{dbStatus.lastUpdateTime 
                           ? new Date(dbStatus.lastUpdateTime).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' })
                           : '尚未同步'}
-                        {dbStatus.totalCases > 0 && ` • 共 ${dbStatus.totalCases.toLocaleString()} 筆資料`}
                       </span>
                     </div>
                   )}
-                  {/* Data Sources */}
-                  {dbStatus && dbStatus.sources.length > 0 && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <span>
-                        資料來源：{dbStatus.sources.join('、')}
-                      </span>
-                    </div>
-                  )}
+                  {/* 下方原本的純文字資料來源已刪除 */}
                 </div>
               </CardContent>
             </Card>
@@ -290,19 +280,14 @@ export default function Home() {
                     animate={{ rotate: [0, 10, -10, 0] }}
                     transition={{ duration: 0.5, repeat: Infinity }}
                   />
-                  <p className="text-muted-foreground">小蜂正在搜尋中...</p>
+                  <p className="text-muted-foreground">小蜂正在即時搜尋政府與新聞資料庫...</p>
                 </div>
               ) : searchResults ? (
                 <div className="space-y-4">
-                  {/* Results Header */}
+                  {/* Results Header (只保留標題，不顯示容易誤導的數字) */}
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-semibold text-foreground">
                       搜尋結果
-                      {searchResults.total > 0 && (
-                        <span className="text-muted-foreground font-normal ml-2">
-                          ({searchResults.total} 筆)
-                        </span>
-                      )}
                     </h2>
                   </div>
 
@@ -324,18 +309,18 @@ export default function Home() {
                   {/* Results List */}
                   {searchResults.found && (
                     <>
-                      {/* Warning Banner */}
+                      {/* Warning Banner (已簡化：移除筆數統計) */}
                       <Card className="bg-warning-coral/10 border-warning-coral/30">
                         <CardContent className="p-4 flex items-start gap-3">
                           <AlertTriangle className="w-6 h-6 text-warning-coral flex-shrink-0 mt-0.5" />
                           <div>
                             <h3 className="font-semibold text-warning-coral">
-                              {searchResults.searchedName ? '發現相似紀錄' : '查詢結果'}
+                              {searchResults.searchedName ? '發現相關紀錄' : '查詢結果'}
                             </h3>
                             <p className="text-sm text-foreground/70 mt-1">
                               {searchResults.searchedName 
-                                ? `以下為與「${searchResults.searchedName}」相似的紀錄，請仔細核對。`
-                                : `共找到 ${searchResults.total} 筆${searchResults.searchedArea ? ` ${searchResults.searchedArea} 的` : ''}裁罰紀錄。`
+                                ? `以下為與「${searchResults.searchedName}」相關的紀錄，包含即時網路搜尋結果，請仔細核對。`
+                                : `請參考以下裁罰紀錄。`
                               }
                             </p>
                           </div>
@@ -368,7 +353,7 @@ export default function Home() {
                                 載入中...
                               </>
                             ) : (
-                              <>載入更多 (還有 {searchResults.total - displayResults.length} 筆)</>
+                              <>載入更多</>
                             )}
                           </Button>
                         </div>
@@ -437,7 +422,7 @@ export default function Home() {
             {[
               { step: 1, title: '輸入姓名', desc: '輸入要查詢的陪玩/保母姓名' },
               { step: 2, title: '選擇地區', desc: '可選擇特定地區縮小範圍' },
-              { step: 3, title: '查看結果', desc: '系統會顯示相似度比對結果' },
+              { step: 3, title: '查看結果', desc: '系統會顯示即時搜尋與比對結果' },
               { step: 4, title: '謹慎判斷', desc: '資料僅供參考，請綜合評估' },
             ].map((item) => (
               <div key={item.step} className="text-center">
@@ -542,12 +527,13 @@ function ResultCard({ result, index }: ResultCardProps) {
                 <h3 className="text-lg font-semibold text-foreground">
                   {caseData.maskedName}
                 </h3>
-                <Badge variant="outline" className={`${getSimilarityBg()} ${getSimilarityColor()} border-0`}>
-                  相似度 {similarity}%
-                </Badge>
+                {/* 移除相似度 Badge，因為即時搜尋結果都是 100% 匹配或模糊匹配，
+                  顯示相似度數字反而會讓家長困惑。
+                  我們只在高度危險時顯示標籤。
+                */}
                 {matchType === 'high' && (
                   <Badge variant="destructive" className="animate-pulse">
-                    高度相似
+                    高度關注
                   </Badge>
                 )}
               </div>
@@ -574,7 +560,7 @@ function ResultCard({ result, index }: ResultCardProps) {
               </div>
 
               {caseData.description && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                   {caseData.description}
                 </p>
               )}
@@ -595,7 +581,7 @@ function ResultCard({ result, index }: ResultCardProps) {
                 )}
               </div>
               {caseData.caseDate && (
-                <span className="text-muted-foreground">{caseData.caseDate}</span>
+                <span className="text-muted-foreground">{new Date(caseData.caseDate).toLocaleDateString()}</span>
               )}
               {caseData.sourceLink && (
                 <a 
