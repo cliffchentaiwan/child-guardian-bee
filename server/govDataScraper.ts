@@ -1,7 +1,6 @@
 import puppeteer from 'puppeteer';
 
-// 🛑 核心資產：內建真實黑名單 (Seed Data)
-// 這裡存放已經確認的違規名單，保證家長一定能搜到，不受爬蟲阻擋影響
+// 🛑 內建真實黑名單 (Seed Data) - 這是我們的保險，保證搜得到
 const REAL_BAD_ACTORS_SEED = [
   {
     title: "林麗琴 - 違反兒少法公告",
@@ -26,7 +25,7 @@ const REAL_BAD_ACTORS_SEED = [
   }
 ];
 
-// 定義外部搜尋來源
+// 定義搜尋來源
 const GOV_SITES = [
   { name: '全國教保資訊網', domain: 'ap.ece.moe.edu.tw' },
   { name: 'CRC 兒少權益網', domain: 'crc.mohw.gov.tw' },
@@ -48,22 +47,20 @@ export const searchGovLive = async (keyword: string) => {
   const results: any[] = [];
   console.log(`🕵️‍♂️ 啟動混合搜尋，目標：${keyword}`);
 
-  // ==========================================
-  // 🟢 第一階段：搜尋內建名單 (速度快、100% 準確)
-  // ==========================================
+  // 1. 🟢 第一階段：搜尋內建名單 (優先命中)
   const matchedSeeds = REAL_BAD_ACTORS_SEED.filter(seed => 
     seed.title.includes(keyword) || 
     seed.snippet.includes(keyword) ||
-    (keyword === "林麗琴" && seed.title.includes("林麗琴")) // 強制比對
+    (keyword === "林麗琴" && seed.title.includes("林麗琴")) // 強制命中林麗琴
   );
 
   for (const seed of matchedSeeds) {
     console.log(`✅ 命中內建黑名單: ${seed.title}`);
     results.push({
-      maskedName: keyword, // 標記為用戶搜尋的名字
+      maskedName: keyword, 
       role: "查詢對象",
       riskTags: seed.riskTags,
-      location: "台灣", // 若 snippet 有寫可解析，這裡先統稱台灣
+      location: "台灣",
       caseDate: new Date().toISOString(),
       description: `【${seed.sourceName}】${seed.title}\n${seed.snippet}`,
       sourceType: "政府公告",
@@ -72,9 +69,7 @@ export const searchGovLive = async (keyword: string) => {
     });
   }
 
-  // ==========================================
-  // 🟡 第二階段：DuckDuckGo 即時爬蟲 (補充最新資料)
-  // ==========================================
+  // 2. 🟡 第二階段：DuckDuckGo 即時爬蟲
   try {
     const browser = await puppeteer.launch({
       args: [
@@ -89,16 +84,13 @@ export const searchGovLive = async (keyword: string) => {
 
     try {
       const page = await browser.newPage();
-      // 偽裝成一般瀏覽器
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
-      const siteQuery = GOV_SITES.map(s => `site:${s.domain}`).join(' OR ');
-      const fullQuery = `${siteQuery} "${keyword}"`;
+      const fullQuery = `${GOV_SITES.map(s => `site:${s.domain}`).join(' OR ')} "${keyword}"`;
       const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(fullQuery)}`;
 
       console.log(`🦆 前往 DuckDuckGo: ${searchUrl}`);
-      // 設定 15 秒超時，避免卡住
-      await page.goto(searchUrl, { waitUntil: 'networkidle0', timeout: 15000 });
+      await page.goto(searchUrl, { waitUntil: 'networkidle0', timeout: 10000 });
 
       const scrapedItems = await page.evaluate(() => {
         const items: any[] = [];
@@ -118,31 +110,22 @@ export const searchGovLive = async (keyword: string) => {
       console.log(`🦆 爬蟲找到 ${scrapedItems.length} 筆額外資料`);
 
       for (const item of scrapedItems) {
-        // 簡單去重：如果內建名單已經有這個連結，就不要重複加
         if (!results.some(r => r.sourceLink === item.link)) {
-            let sourceName = '政府公開資訊';
-            if (item.link.includes('ece.moe')) sourceName = '全國教保資訊網';
-            else if (item.link.includes('crc.mohw')) sourceName = 'CRC 兒少權益網';
-            else if (item.link.includes('edu.tw')) sourceName = '教育局公告';
-
-            // 再次確認關鍵字相關性
-            if (item.title.includes(keyword) || (item.snippet && item.snippet.includes(keyword))) {
-                results.push({
-                  maskedName: keyword,
-                  role: "查詢對象",
-                  riskTags: ["政府公開紀錄", sourceName],
-                  location: "台灣",
-                  caseDate: new Date().toISOString(),
-                  description: `【${sourceName}】${item.title}\n${item.snippet}`,
-                  sourceType: "政府公告",
-                  sourceLink: item.link,
-                  verified: true
-                });
-            }
+            results.push({
+              maskedName: keyword,
+              role: "查詢對象",
+              riskTags: ["政府公開紀錄"],
+              location: "台灣",
+              caseDate: new Date().toISOString(),
+              description: `【政府公告】${item.title}\n${item.snippet}`,
+              sourceType: "政府公告",
+              sourceLink: item.link,
+              verified: true
+            });
         }
       }
     } catch (e) {
-      console.error("爬蟲部分失敗 (不影響內建結果):", e);
+      console.error("爬蟲部分失敗:", e);
     } finally {
       await browser.close();
     }
@@ -153,7 +136,6 @@ export const searchGovLive = async (keyword: string) => {
   return results;
 };
 
-// 相容舊介面
 export const syncAllGovData = async (onData: (data: any) => Promise<void>) => {
   return { success: true, message: "已切換為混合搜尋模式" };
 };

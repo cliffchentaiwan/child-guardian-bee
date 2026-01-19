@@ -24,7 +24,7 @@ export const appRouter = router({
     }),
   }),
 
-  // 搜尋相關 API (即時爬蟲版)
+  // 搜尋相關 API (直通車模式：強制顯示即時結果)
   search: router({
     cases: publicProcedure
       .input(z.object({
@@ -38,34 +38,47 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const { name, area, district, violationType, limit, offset } = input;
         
-        // 1. 🟢 如果有輸入名字，啟動【即時政府爬蟲】
+        // 1. 取得即時爬蟲/種子結果 (Gov Live)
+        let liveResults: any[] = [];
         if (name && name.length >= 2) {
             try {
-                // 呼叫即時搜尋引擎
-                const liveResults = await govDataScraper.searchGovLive(name);
+                // 呼叫 govDataScraper 取得真實資料
+                liveResults = await govDataScraper.searchGovLive(name);
                 
-                // 將搜到的結果寫入資料庫 (作為快取)
+                // 背景執行：嘗試寫入資料庫 (不 await，不讓它卡住回傳)
                 for (const res of liveResults) {
-                     try {
-                        await db.insertCase(res);
-                     } catch (e) {
-                         // 忽略寫入錯誤
-                     }
+                     db.insertCase(res).catch(e => console.error("DB Insert Skip", e));
                 }
             } catch (err) {
-                console.error("即時搜尋發生錯誤:", err);
+                console.error("即時搜尋錯誤:", err);
             }
         }
         
-        // 2. 從資料庫讀取所有資料
-        const { results: caseResults, total } = await db.searchCases({ 
+        // 2. 取得資料庫舊結果
+        const { results: dbResults, total } = await db.searchCases({ 
           name, area, district, violationType, limit, offset 
         });
         
-        // 3. 計算相似度
-        const resultsWithSimilarity = caseResults.map((caseItem: typeof caseResults[0]) => {
+        // 3. 【關鍵】合併資料 (即時結果優先！)
+        // 我們給即時結果一個負數 ID，確保前端能渲染
+        const liveResultsFormatted = liveResults.map((r, idx) => ({
+            ...r,
+            id: -1 * (idx + 1), 
+            matchType: 'exact',
+        }));
+
+        // 避免重複顯示 (如果連結一樣就過濾掉即時的，改用資料庫的)
+        const uniqueLiveResults = liveResultsFormatted.filter(live => 
+            !dbResults.some(dbItem => dbItem.sourceLink === live.sourceLink)
+        );
+
+        // 合併：即時結果放前面
+        const finalResults = [...uniqueLiveResults, ...dbResults];
+        
+        // 4. 計算相似度
+        const resultsWithSimilarity = finalResults.map((caseItem: any) => {
           let similarity = 100;
-          let matchType: 'exact' | 'high' | 'medium' | 'low' = 'exact';
+          let matchType = caseItem.matchType || 'exact';
           
           if (name && name.trim()) {
             similarity = calculateSimilarity(name, caseItem.maskedName);
@@ -87,14 +100,14 @@ export const appRouter = router({
           searchedName: name || '',
           searchedArea: area,
           foundResults: resultsWithSimilarity.length > 0,
-          resultCount: total,
+          resultCount: total + uniqueLiveResults.length,
         });
         
         return {
           found: resultsWithSimilarity.length > 0,
           searchedName: name || '',
           searchedArea: area,
-          total,
+          total: total + uniqueLiveResults.length,
           hasMore: offset + limit < total,
           results: resultsWithSimilarity,
           disclaimer: resultsWithSimilarity.length > 0 
