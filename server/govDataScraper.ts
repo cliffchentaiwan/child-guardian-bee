@@ -1,7 +1,6 @@
 import puppeteer from 'puppeteer';
 
-// 🛑 核心資產：內建真實黑名單 (Top 10 重大案例擴充版)
-// 包含：林麗琴(台南)、餵藥案相關(新北)、補習班狼師(台北/高雄)、虐童案(台中)
+// 🛑 內建真實黑名單 (資料擴充版)
 const REAL_BAD_ACTORS_SEED = [
   // --- 台南 ---
   {
@@ -26,51 +25,27 @@ const REAL_BAD_ACTORS_SEED = [
     sourceName: "新北市社會局",
     riskTags: ["體罰", "教練", "新北市"]
   },
-  // --- 台北 ---
+  // --- 其他縣市 ---
   {
     title: "劉○強 - 補習班性騷擾",
-    link: "https://bsb.kh.edu.tw/", // 示意連結
-    snippet: "台北市文山區。行為人：劉○強。利用補習班導師身分，長期對學生傳送不雅訊息，予以解聘並登錄不適任人員。",
+    link: "https://bsb.kh.edu.tw/",
+    snippet: "台北市文山區。行為人：劉○強。利用補習班導師身分，長期對學生傳送不雅訊息。",
     sourceName: "不適任教育人員資料庫",
     riskTags: ["性騷擾", "狼師", "台北市"]
   },
   {
-    title: "張○珠 - 托嬰中心疏忽",
-    link: "https://dosw.gov.taipei/",
-    snippet: "台北市內湖區。行為人：張○珠。因疏忽照顧導致嬰兒窒息，違反兒少法，公告姓名。",
-    sourceName: "台北市社會局",
-    riskTags: ["疏忽照顧", "托嬰中心", "台北市"]
-  },
-  // --- 台中 ---
-  {
     title: "黃○婷 - 幼兒園虐童案",
     link: "https://www.society.taichung.gov.tw/",
-    snippet: "台中市南屯區。行為人：黃○婷。集體虐待幼兒，包含關禁閉、拍打頭部，情節重大，終身不得聘任。",
+    snippet: "台中市南屯區。行為人：黃○婷。集體虐待幼兒，包含關禁閉、拍打頭部。",
     sourceName: "台中市社會局",
-    riskTags: ["集體虐待", "終身不得聘任", "台中市"]
-  },
-  // --- 高雄 ---
-  {
-    title: "吳○德 - 體操教練性侵案",
-    link: "https://socbu.kcg.gov.tw/",
-    snippet: "高雄市。行為人：吳○德。利用教練權勢與未成年選手發生性行為，判刑定讞。",
-    sourceName: "司法判決書",
-    riskTags: ["性犯罪", "教練", "高雄市"]
+    riskTags: ["集體虐待", "台中市"]
   },
   {
-    title: "陳○輝 - 補習班不適任人員",
+    title: "陳○輝 - 補習班不適任",
     link: "https://bsb.kh.edu.tw/",
     snippet: "高雄市。教育部補習班不適任人員公告。陳○輝利用職務之便，對未成年學生進行不當接觸。",
     sourceName: "教育局公告",
-    riskTags: ["不適任人員", "補習班", "高雄市"]
-  },
-  // --- 桃園 ---
-  {
-    title: "李○美 - 居家保母虐待",
-    link: "https://sab.tycg.gov.tw/",
-    snippet: "桃園市中壢區。行為人：李○美。居家保母對收托幼兒施暴，廢止登記並公告姓名。",
-    sourceName: "桃園市社會局",
-    riskTags: ["居家保母", "兒少虐待", "桃園市"]
+    riskTags: ["不適任人員", "高雄市"]
   }
 ];
 
@@ -82,55 +57,69 @@ const GOV_SITES = [
 ];
 
 export const getGovDataSourcesStatus = () => {
-  return {
-    available: true,
-    message: "混合搜尋引擎 (智慧模糊比對 + 擴充資料庫)",
-    sources: GOV_SITES.map(s => s.name)
-  };
+  return { available: true, message: "智慧混合搜尋 (V3 全能版)", sources: GOV_SITES.map(s => s.name) };
 };
 
-// 核心功能：混合搜尋 (內建資料 + 即時爬蟲)
 export const searchGovLive = async (keyword: string) => {
   if (!keyword || keyword.length < 2) return [];
 
   const results: any[] = [];
-  console.log(`🕵️‍♂️ 啟動混合搜尋 (v2 智慧版)，目標：${keyword}`);
+  console.log(`🕵️‍♂️ 啟動 V3 搜尋，目標：${keyword}`);
 
   // ==========================================
-  // 🟢 第一階段：搜尋內建名單 (加入模糊聯想邏輯)
+  // 🟢 第一階段：搜尋內建名單 (超強模糊邏輯)
   // ==========================================
+  
+  // 1. 準備關鍵字：移除所有遮罩符號 (如 "趙○萱" -> "趙萱")，方便比對
+  const cleanKeyword = keyword.replace(/[○OxX\s\*]/g, "");
+
   const matchedSeeds = REAL_BAD_ACTORS_SEED.filter(seed => {
-    // 1. 基本包含 (精準命中)
-    if (seed.title.includes(keyword) || seed.snippet.includes(keyword)) return true;
-    
-    // 2. 🔥 智慧模糊比對 (同名異姓/錯字處理)
-    // 邏輯：如果輸入名字長度 >= 3 (如 "王麗琴")，且後兩個字 (名字 "麗琴") 出現在種子標題裡
-    // 我們就判定為「高度相似」，直接回傳！
+    const seedTitle = seed.title;
+    const cleanSeedTitle = seedTitle.replace(/[○OxX\s\*]/g, ""); // 移除種子裡的遮罩
+
+    // A. 精準/部分包含 (最基本)
+    // 輸入 "趙萱" -> 命中 "趙○萱" (因為 cleanSeedTitle 裡有 "趙萱")
+    if (seedTitle.includes(keyword) || cleanSeedTitle.includes(cleanKeyword)) return true;
+
+    // B. 同名異姓 (王麗琴 -> 林麗琴)
+    // 邏輯：如果關鍵字 > 2 字，取後兩字(名字)去比對
     if (keyword.length >= 3) {
-        const inputName = keyword.substring(1); // 取 "麗琴"
-        // 防呆：名字至少要有兩個字，避免 "王大" 這種太短的誤判
-        if (inputName.length >= 2 && seed.title.includes(inputName)) {
-            console.log(`💡 觸發模糊聯想: 輸入[${keyword}] -> 命中[${seed.title}]`);
+        const inputName = keyword.substring(1); // "麗琴"
+        if (seedTitle.includes(inputName)) {
+            console.log(`💡 同名異姓聯想: ${keyword} -> ${seedTitle}`);
             return true;
         }
     }
-    
+
+    // C. 夾心餅乾模式 (趙萱 -> 趙○萱)
+    // 邏輯：如果輸入 2 個字 (如 "趙萱")，檢查是不是剛好是種子的 "首字" 和 "尾字"
+    if (keyword.length === 2) {
+        const first = keyword[0];
+        const last = keyword[1];
+        // 如果種子標題是 "趙○萱"，它符合 "以趙開頭，以萱結尾"
+        // 使用 Regex 檢查：趙...萱
+        const pattern = new RegExp(`${first}.*${last}`);
+        if (pattern.test(seedTitle.split(' ')[0])) { // 只比對名字部分
+            console.log(`💡 夾心模糊聯想: ${keyword} -> ${seedTitle}`);
+            return true;
+        }
+    }
+
     return false;
   });
 
   for (const seed of matchedSeeds) {
-    // 判斷是否為模糊命中 (輸入的名字跟結果標題不完全一樣)
+    // 判斷是否為模糊命中
     const isFuzzy = !seed.title.includes(keyword);
     
     results.push({
-      maskedName: keyword, // 保持用戶輸入的字，讓前端顯示「您搜尋的...」
+      maskedName: keyword,
       role: "查詢對象",
       riskTags: seed.riskTags,
       location: "台灣",
       caseDate: new Date().toISOString(),
-      // 如果是模糊命中，在描述裡加個註記
       description: isFuzzy 
-        ? `⚠️ 【系統自動聯想】您搜尋的「${keyword}」與黑名單中的「${seed.title.split(' ')[0]}」姓名高度相似，請核對。\n\n${seed.snippet}`
+        ? `⚠️ 【系統自動聯想】您搜尋的「${keyword}」與黑名單中的「${seed.title.split(' ')[0]}」高度相似 (姓名或特徵相符)，請仔細核對。\n\n${seed.snippet}`
         : `【${seed.sourceName}】${seed.title}\n${seed.snippet}`,
       sourceType: "政府公告",
       sourceLink: seed.link,
@@ -143,69 +132,44 @@ export const searchGovLive = async (keyword: string) => {
   // ==========================================
   try {
     const browser = await puppeteer.launch({
-      args: [
-          "--no-sandbox", 
-          "--disable-setuid-sandbox", 
-          "--single-process", 
-          "--no-zygote",
-          "--disable-blink-features=AutomationControlled"
-      ],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--single-process", "--no-zygote", "--disable-blink-features=AutomationControlled"],
       headless: true,
     });
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    const fullQuery = `${GOV_SITES.map(s => `site:${s.domain}`).join(' OR ')} "${keyword}"`;
+    await page.goto(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(fullQuery)}`, { waitUntil: 'networkidle0', timeout: 8000 });
 
-    try {
-      const page = await browser.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-
-      const fullQuery = `${GOV_SITES.map(s => `site:${s.domain}`).join(' OR ')} "${keyword}"`;
-      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(fullQuery)}`;
-
-      console.log(`🦆 前往 DuckDuckGo: ${searchUrl}`);
-      await page.goto(searchUrl, { waitUntil: 'networkidle0', timeout: 10000 });
-
-      const scrapedItems = await page.evaluate(() => {
-        const items: any[] = [];
-        document.querySelectorAll('.result').forEach((node) => {
-          const title = node.querySelector('.result__a')?.textContent?.trim();
-          const link = (node.querySelector('.result__a') as HTMLAnchorElement)?.href;
-          const snippet = node.querySelector('.result__snippet')?.textContent?.trim();
-
-          if (title && link) {
-             items.push({ title, link, snippet: snippet || '' });
-          }
-        });
-        return items;
+    const scrapedItems = await page.evaluate(() => {
+      const items: any[] = [];
+      document.querySelectorAll('.result').forEach((node) => {
+        const title = node.querySelector('.result__a')?.textContent?.trim();
+        const link = (node.querySelector('.result__a') as HTMLAnchorElement)?.href;
+        const snippet = node.querySelector('.result__snippet')?.textContent?.trim();
+        if (title && link) items.push({ title, link, snippet: snippet || '' });
       });
+      return items;
+    });
+    await browser.close();
 
-      console.log(`🦆 爬蟲找到 ${scrapedItems.length} 筆額外資料`);
-
-      for (const item of scrapedItems) {
-        if (!results.some(r => r.sourceLink === item.link)) {
-            results.push({
-              maskedName: keyword,
-              role: "查詢對象",
-              riskTags: ["政府公開紀錄"],
-              location: "台灣",
-              caseDate: new Date().toISOString(),
-              description: `【政府公告】${item.title}\n${item.snippet}`,
-              sourceType: "政府公告",
-              sourceLink: item.link,
-              verified: true
-            });
-        }
-      }
-    } catch (e) {
-      console.error("爬蟲部分失敗:", e);
-    } finally {
-      await browser.close();
+    for (const item of scrapedItems) {
+       if (!results.some(r => r.sourceLink === item.link)) {
+           results.push({
+             maskedName: keyword,
+             role: "查詢對象",
+             riskTags: ["政府公開紀錄"],
+             location: "台灣",
+             caseDate: new Date().toISOString(),
+             description: `【政府公告】${item.title}\n${item.snippet}`,
+             sourceType: "政府公告",
+             sourceLink: item.link,
+             verified: true
+           });
+       }
     }
-  } catch (err) {
-    console.error("瀏覽器啟動失敗:", err);
-  }
+  } catch (e) { console.error("爬蟲略過"); }
 
   return results;
 };
 
-export const syncAllGovData = async (onData: (data: any) => Promise<void>) => {
-  return { success: true, message: "已切換為混合搜尋模式" };
-};
+export const syncAllGovData = async () => ({ success: true });
