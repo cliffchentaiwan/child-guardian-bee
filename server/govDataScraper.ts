@@ -1,103 +1,117 @@
 import puppeteer from 'puppeteer';
 
-// 定義資料結構
-interface GovPenalty {
-  name: string;
-  org: string;
-  date: string;
-  reason: string;
-  link: string;
-}
+// 定義我們要搜的政府黑名單網站
+const GOV_SITES = [
+  { 
+    name: '全國教保資訊網', 
+    domain: 'ap.ece.moe.edu.tw', 
+    type: '不適任/裁罰' 
+  },
+  { 
+    name: 'CRC 兒少權益網', 
+    domain: 'crc.mohw.gov.tw', 
+    type: '兒少法裁罰' 
+  },
+  {
+    name: '各縣市教育局公告',
+    domain: 'edu.tw', 
+    type: '補習班違規'
+  }
+];
 
 export const getGovDataSourcesStatus = () => {
   return {
     available: true,
-    message: "政府公開資料爬蟲就緒",
-    sources: ["全國教保資訊網", "縣市政府教育局裁罰公告"]
+    message: "即時政府搜尋引擎 (Real-time)",
+    sources: GOV_SITES.map(s => s.name)
   };
 };
 
-// 模擬抓取 + 真實歷史資料庫
-// 因為政府網站常改版或擋 IP，我們先用一份「真實發生過的」歷史黑名單作為種子資料
-// 確保家長一定能查到這些已知的危險人物
-const KNOWN_BAD_ACTORS = [
-  {
-    name: "陳Ｏ", // 這裡模擬隱碼，實際應用可視法律規定調整
-    org: "私立ＯＯ幼兒園",
-    date: "2023-09-15",
-    reason: "對幼兒有身心虐待行為，終身不得聘任",
-    link: "https://ap.ece.moe.edu.tw/webecems/pubSearch.aspx"
-  },
-  {
-    name: "林Ｏ惠",
-    org: "ＯＯ托嬰中心",
-    date: "2024-01-05",
-    reason: "不當管教，處以罰鍰並公告姓名",
-    link: "https://ap.ece.moe.edu.tw/webecems/pubSearch.aspx"
-  },
-  {
-    name: "張Ｏ豪",
-    org: "ＯＯ補習班",
-    date: "2023-11-20",
-    reason: "性騷擾學生，經調查屬實",
-    link: "https://bsb.kh.edu.tw/"
-  }
-];
+// 核心功能：給一個名字，我現在馬上去政府網站搜給你
+export const searchGovLive = async (keyword: string) => {
+  // 防呆：關鍵字太短不搜，避免雜訊
+  if (!keyword || keyword.length < 2) return [];
 
-export const syncAllGovData = async (
-  onData: (data: any) => Promise<void>
-) => {
-  console.log("🏛️ 啟動政府資料爬蟲...");
+  console.log(`🕵️‍♂️ 啟動即時搜尋，目標：${keyword}`);
   
-  let browser = null;
-  let syncedCount = 0;
-  
+  // 啟動瀏覽器
+  const browser = await puppeteer.launch({
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--single-process", "--no-zygote"],
+    headless: true,
+  });
+
+  const results: any[] = [];
+
   try {
-    // 1. 嘗試連線到教保網 (測試連線能力)
-    browser = await puppeteer.launch({
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--single-process", "--no-zygote"],
-      headless: true,
-    });
-    
     const page = await browser.newPage();
-    // 全國教保資訊網裁罰公告區
-    const targetUrl = 'https://ap.ece.moe.edu.tw/webecems/pubSearch.aspx';
-    
-    console.log(`正在前往: ${targetUrl}`);
-    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    
-    // 如果能成功截圖，代表連線成功 (這裡僅作連線測試，不做複雜的表格爬取，因為政府網站改版極快)
-    // 為了系統穩定，我們採用「混合模式」：
-    // 即時爬取若失敗，則使用內建的「已知黑名單庫」
-    
-  } catch (error: any) {
-    console.error("政府網站連線緩慢或阻擋 (切換至內建資料庫模式):", error.message);
-  } finally {
-    if (browser) await browser.close();
-  }
+    // 偽裝成真人使用者，避免被阻擋
+    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36');
 
-  console.log("正在寫入裁罰資料...");
-  
-  // 2. 寫入資料
-  for (const item of KNOWN_BAD_ACTORS) {
-    await onData({
-      maskedName: item.name,
-      role: "學校老師", // 或根據機構判斷
-      riskTags: ["不適任人員", "兒少虐待", "政府公告"],
-      location: "全國", // 政府公告通常是全國性的
-      description: `【${item.org}】${item.reason}`,
-      sourceType: "政府公告",
-      sourceLink: item.link,
-      penaltyDate: item.date,
-      verified: true // 政府公告視為已查證
+    // 策略：使用 Google Site Search 鎖定政府網域
+    // 語法範例：site:ap.ece.moe.edu.tw OR site:crc.mohw.gov.tw "王小明"
+    const siteQuery = GOV_SITES.map(s => `site:${s.domain}`).join(' OR ');
+    const searchQuery = `${siteQuery} "${keyword}"`;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+
+    console.log(`前往搜尋: ${searchUrl}`);
+    // 設定較短的超時，避免家長等太久 (15秒)
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+    // 抓取搜尋結果
+    const scrapedItems = await page.evaluate(() => {
+      const items: any[] = [];
+      // 選取 Google 搜尋結果的區塊
+      const searchResults = document.querySelectorAll('div.g'); 
+      
+      searchResults.forEach((el) => {
+        const titleEl = el.querySelector('h3');
+        const linkEl = el.querySelector('a');
+        const descEl = el.querySelector('div[style*="-webkit-line-clamp"]') || el.querySelector('span em')?.parentElement || el.querySelector('div[data-sncf="1"]');
+
+        if (titleEl && linkEl) {
+          items.push({
+            title: titleEl.textContent || '',
+            link: (linkEl as HTMLAnchorElement).href,
+            snippet: descEl ? descEl.textContent : ''
+          });
+        }
+      });
+      return items;
     });
-    syncedCount++;
+
+    console.log(`找到 ${scrapedItems.length} 筆政府相關紀錄`);
+
+    // 整理資料回傳
+    for (const item of scrapedItems) {
+      // 簡單分類來源
+      let sourceName = '政府公開資訊';
+      if (item.link.includes('ece.moe')) sourceName = '全國教保資訊網';
+      else if (item.link.includes('crc.mohw')) sourceName = 'CRC 兒少權益網';
+      else if (item.link.includes('edu.tw')) sourceName = '教育局公告';
+
+      results.push({
+        maskedName: keyword, // 這是用此關鍵字搜出來的
+        role: "查詢對象",
+        riskTags: ["政府公開紀錄", sourceName],
+        location: "台灣",
+        caseDate: new Date().toISOString(),
+        description: `【${sourceName}】${item.title} - ${item.snippet}`,
+        sourceType: "政府公告",
+        sourceLink: item.link,
+        verified: true
+      });
+    }
+
+  } catch (error: any) {
+    console.error("即時搜尋失敗 (可能是連線逾時):", error.message);
+  } finally {
+    await browser.close();
   }
 
-  return {
-    success: true,
-    synced: syncedCount,
-    added: syncedCount,
-    error: undefined
-  };
+  return results;
+};
+
+// 相容性函式 (保留給舊介面呼叫，實際上不會用到)
+export const syncAllGovData = async (onData: (data: any) => Promise<void>) => {
+  return { success: true, message: "已切換為即時搜尋模式" };
 };
