@@ -8,16 +8,19 @@ import { eq } from 'drizzle-orm';
 async function crawlCRC() {
   console.log("🛡️ [CRC 兒少裁罰] 啟動！正在為您收割全台裁罰資料...");
   
-  // 🔥 優化重點：加入 Render 專用的穩定參數
+  // 🔥 Render 專用：極限省記憶體設定
   const browser = await puppeteer.launch({
-    headless: true, // 雲端必備
+    headless: true, // 雲端必備：無頭模式
     defaultViewport: null,
     args: [
-        '--start-maximized', 
         '--no-sandbox', 
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage', // 避免記憶體不足 (Render 免費版很需要這個)
-        '--disable-gpu'
+        '--disable-dev-shm-usage', // 關鍵：避免 Docker 記憶體不足
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process', // ⚠️ 關鍵：強制單一進程，大幅降低記憶體消耗
+        '--disable-extensions'
     ]
   });
 
@@ -201,6 +204,10 @@ async function crawlCRC() {
     console.error("❌ CRC 錯誤:", error.message);
   } finally {
     await browser.close();
+    // 只有在直接執行時才退出，避免影響被呼叫的情況
+    if (import.meta.url === `file://${process.argv[1]}`) {
+        process.exit(0);
+    }
   }
 }
 
