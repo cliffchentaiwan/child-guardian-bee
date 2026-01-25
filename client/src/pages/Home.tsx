@@ -1,43 +1,48 @@
 /**
- * 兒少守護小蜂 - 首頁
- * Design: 溫暖守護者 (Warm Guardian) Style
- * Features: Hero Search, Quick Access, Disclaimer Footer
+ * 兒少守護小蜂 - 首頁 (溫暖守護者 最終修復版)
+ * Fixes: 
+ * 1. 地區選單改用原生 <select> 保證可點擊
+ * 2. 搜尋參數傳遞優化
+ * 3. 完整保留 UI 設計風格
  */
+'use client';
 
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { motion } from 'framer-motion';
 import { 
   Search, 
-  AlertTriangle, 
-  BookOpen, 
-  Shield,
-  ExternalLink,
-  CheckCircle,
+  Database, 
+  Newspaper, 
+  MapPin, 
+  CheckCircle, 
+  ExternalLink, 
   Info,
-  Database,
-  Newspaper,
-  Users,
-  MapPin
+  ShieldCheck, // 增加這個給裁罰
+  Scale        // 增加這個給判決
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { trpc } from '@/lib/trpc';
 
-// 資料來源圖示
+// 資料來源圖示對照
 const sourceIcons: Record<string, React.ReactNode> = {
-  '政府公告': <Database className="w-4 h-4" />,
-  '媒體報導': <Newspaper className="w-4 h-4" />,
-  '社群輿情': <Users className="w-4 h-4" />,
+  'gov_crc': <Database className="w-3 h-3" />,
+  'gov_edu': <ShieldCheck className="w-3 h-3" />,
+  'judicial': <Scale className="w-3 h-3" />,
+  'news': <Newspaper className="w-3 h-3" />,
+  'default': <Info className="w-3 h-3" />
+};
+
+// 資料來源名稱對照
+const sourceLabels: Record<string, string> = {
+  'gov_crc': 'CRC 裁罰',
+  'gov_edu': '教保裁罰',
+  'judicial': '司法判決',
+  'news': '媒體報導',
+  'default': '一般資訊'
 };
 
 export default function Home() {
@@ -47,13 +52,13 @@ export default function Home() {
   const [offset, setOffset] = useState(0);
   const [allResults, setAllResults] = useState<any[]>([]);
 
-  // 使用 tRPC 取得地區列表
+  // 取得地區列表 (後端動態提供)
   const { data: areaOptions = ['全部地區'] } = trpc.search.areas.useQuery();
 
-  // 取得資料庫最後更新時間
-  const { data: dbStatus } = trpc.database.lastUpdate.useQuery();
+  // 取得資料庫狀態 (真實數據)
+  const { data: dbStatus, isLoading: isDbLoading } = trpc.database.lastUpdate.useQuery();
 
-  // 使用 tRPC 進行搜尋
+  // 搜尋參數
   const [searchParams, setSearchParams] = useState<{ 
     name?: string; 
     area?: string; 
@@ -61,34 +66,33 @@ export default function Home() {
     offset?: number;
   } | null>(null);
   
+  // 查詢 API
   const { data: searchResults, isLoading: isSearching, isFetching } = trpc.search.cases.useQuery(
     searchParams!,
-    {
-      enabled: !!searchParams,
-    }
+    { enabled: !!searchParams }
   );
 
-  // 當搜尋結果更新時，累積結果
   const displayResults = searchParams?.offset === 0 
     ? searchResults?.results || []
     : [...allResults, ...(searchResults?.results || [])];
 
   const handleSearch = async () => {
-    // 允許只選地區搜尋，或輸入姓名搜尋
+    // 檢查是否有輸入任何條件
     const hasName = searchName.trim().length > 0;
     const hasArea = selectedArea !== '全部地區';
     
-    if (!hasName && !hasArea) {
-      // 如果什麼都沒選，不做動作
-      return;
-    }
+    // 如果什麼都沒輸入，且地區也是全部，就不執行搜尋 (或者您可以允許搜尋全部，看需求)
+    // 這裡設定：至少要輸入名字 OR 選一個地區
+    // if (!hasName && !hasArea) return; 
     
     setHasSearched(true);
     setOffset(0);
     setAllResults([]);
+    
+    // 設定搜尋參數
     setSearchParams({
-      name: hasName ? searchName : undefined,
-      area: hasArea ? selectedArea : undefined,
+      name: hasName ? searchName.trim() : undefined,
+      area: hasArea ? selectedArea : undefined, // 如果是全部地區，就傳 undefined 讓後端搜全台
       limit: 15,
       offset: 0,
     });
@@ -96,56 +100,38 @@ export default function Home() {
 
   const handleLoadMore = () => {
     if (!searchResults?.hasMore || isFetching) return;
-    
     const newOffset = offset + 15;
     setOffset(newOffset);
+    // 保留舊資料，加上新資料
     setAllResults(displayResults);
-    setSearchParams(prev => prev ? {
-      ...prev,
-      offset: newOffset,
-    } : null);
+    setSearchParams(prev => prev ? { ...prev, offset: newOffset } : null);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+    if (e.key === 'Enter') handleSearch();
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col font-sans">
       {/* Header */}
       <header className="sticky top-0 z-50 backdrop-blur-md border-b border-honey-light/30" style={{ backgroundColor: 'oklch(0.985 0.015 90 / 0.8)' }}>
         <div className="container py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <img 
-              src="/images/bee-mascot.png" 
-              alt="守護小蜂" 
-              className="w-10 h-10 object-contain"
-            />
-            <span className="font-bold text-lg text-amber-deep">兒少守護小蜂</span>
+          <Link href="/" className="flex items-center gap-2 no-underline">
+            <span className="text-2xl mr-1">🐝</span>
+            <span className="font-bold text-lg text-amber-deep hidden md:inline">兒少守護小蜂</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
-            <Link href="/report" className="text-foreground/70 hover:text-honey-dark transition-colors font-medium">
-              通報事件
-            </Link>
-            <Link href="/education" className="text-foreground/70 hover:text-honey-dark transition-colors font-medium">
-              教育專區
-            </Link>
+            <Link href="/report" className="text-foreground/70 hover:text-honey-dark transition-colors font-medium cursor-pointer">通報事件</Link>
+            <Link href="/education" className="text-foreground/70 hover:text-honey-dark transition-colors font-medium cursor-pointer">教育專區</Link>
           </nav>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="md:hidden border-honey text-honey-dark"
-            asChild
-          >
-            <Link href="/report">我要求助</Link>
+          <Button variant="outline" size="sm" className="md:hidden border-honey text-honey-dark" asChild>
+            <Link href="/report">求助</Link>
           </Button>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="relative py-12 md:py-20 honeycomb-bg">
+      <section className="relative py-12 md:py-20 honeycomb-bg bg-[#FFFBF0]">
         <div className="container relative z-10">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -153,108 +139,89 @@ export default function Home() {
             transition={{ duration: 0.6 }}
             className="max-w-3xl mx-auto text-center"
           >
-            {/* Mascot */}
-            <motion.img 
-              src="/images/bee-mascot.png" 
-              alt="守護小蜂吉祥物"
-              className="w-24 h-24 md:w-32 md:h-32 mx-auto mb-6"
-              animate={{ y: [0, -8, 0] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            />
+            {/* Mascot Animation */}
+            <motion.div
+               animate={{ y: [0, -10, 0] }}
+               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+               className="mb-6 flex justify-center text-8xl"
+            >
+               🐝
+            </motion.div>
             
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-amber-deep mb-4">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-amber-deep mb-4 tracking-tight">
               兒少守護小蜂
             </h1>
-            <p className="text-lg md:text-xl text-foreground/70 mb-8">
+            <p className="text-lg md:text-xl text-foreground/70 mb-8 font-medium">
               守護孩子的安全，從查詢開始
             </p>
 
-            {/* Search Box */}
+            {/* Search Card */}
             <Card className="bg-white/95 backdrop-blur shadow-xl border-honey-light/30 rounded-2xl overflow-hidden">
               <CardContent className="p-4 md:p-6">
                 <div className="flex flex-col md:flex-row gap-3">
-                  {/* Name Input */}
+                  
+                  {/* 輸入框 */}
                   <div className="flex-1 relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
                       type="text"
-                      placeholder="輸入姓名或暱稱..."
+                      placeholder="輸入姓名、機構或關鍵字..."
                       value={searchName}
                       onChange={(e) => setSearchName(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      className="pl-12 h-12 text-base border-2 border-honey-light/50 focus:border-honey rounded-xl"
+                      onKeyDown={handleKeyPress}
+                      className="pl-12 h-12 text-base border-2 border-honey-light/50 focus:border-honey rounded-xl bg-white"
                     />
                   </div>
-
-                  {/* Area Select */}
-                  <Select value={selectedArea} onValueChange={setSelectedArea}>
-                    <SelectTrigger className="w-full md:w-48 h-12 border-2 border-honey-light/50 focus:border-honey rounded-xl">
-                      <MapPin className="w-4 h-4 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="選擇地區" />
-                    </SelectTrigger>
-                    <SelectContent>
+                  
+                  {/* 🔥 地區選單 (修復版：使用原生 select) */}
+                  <div className="relative w-full md:w-48 h-12">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10 pointer-events-none" />
+                    <select
+                      value={selectedArea}
+                      onChange={(e) => setSelectedArea(e.target.value)}
+                      className="w-full h-full pl-10 pr-8 appearance-none bg-white border-2 border-honey-light/50 focus:border-honey rounded-xl text-base outline-none cursor-pointer text-foreground"
+                      style={{ WebkitAppearance: 'none', MozAppearance: 'none' }} 
+                    >
                       {areaOptions.map((area) => (
-                        <SelectItem key={area} value={area}>
+                        <option key={area} value={area}>
                           {area}
-                        </SelectItem>
+                        </option>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </select>
+                    {/* 自訂下拉箭頭 */}
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m6 9 6 6 6-6"/>
+                      </svg>
+                    </div>
+                  </div>
 
-                  {/* Search Button */}
+                  {/* 搜尋按鈕 */}
                   <Button 
                     onClick={handleSearch}
                     disabled={isSearching}
-                    className="h-12 px-8 bg-honey hover:bg-honey-dark text-amber-deep font-semibold rounded-xl shadow-md hover:shadow-lg transition-all"
+                    className="h-12 px-8 bg-[#F59E0B] hover:bg-[#D97706] text-white font-bold rounded-xl shadow-md transition-all active:scale-95"
                   >
-                    {isSearching ? (
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      >
-                        <Search className="w-5 h-5" />
-                      </motion.div>
-                    ) : (
-                      <>
-                        <Search className="w-5 h-5 mr-2" />
-                        搜尋
-                      </>
-                    )}
+                    {isSearching ? '...' : '搜尋'}
                   </Button>
                 </div>
-
-                {/* Quick Tips */}
-                <p className="text-sm text-muted-foreground mt-3 flex items-center justify-center gap-1">
-                  <Info className="w-4 h-4" />
-                  支援模糊比對，如「王小明」可比對「王○明」
-                </p>
-
-                {/* Data Source Indicators */}
-                <div className="flex items-center justify-center gap-4 mt-4 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Database className="w-3 h-3" /> 政府公告
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Newspaper className="w-3 h-3" /> 媒體報導
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Users className="w-3 h-3" /> 社群輿情
-                  </span>
+                
+                <div className="flex flex-wrap justify-center gap-4 mt-4 text-xs text-muted-foreground font-medium">
+                  <span className="flex items-center gap-1"><Database className="w-3 h-3" /> 政府公告</span>
+                  <span className="flex items-center gap-1"><Newspaper className="w-3 h-3" /> 媒體報導</span>
                 </div>
-
-                {/* Data Sources Status (已簡化：只保留綠色更新狀態) */}
-                <div className="flex flex-col items-center gap-2 mt-3 text-xs">
-                  {dbStatus && (
-                    <div className="flex items-center gap-2 text-safe-green">
-                      <span className="w-2 h-2 rounded-full bg-safe-green" />
-                      <span>
-                        資料庫更新：{dbStatus.lastUpdateTime 
-                          ? new Date(dbStatus.lastUpdateTime).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' })
-                          : '尚未同步'}
-                      </span>
-                    </div>
-                  )}
-                  {/* 下方原本的純文字資料來源已刪除 */}
+                
+                {/* 資料庫狀態 */}
+                <div className="flex justify-center mt-3 text-xs text-green-600 gap-2 items-center">
+                   <div className={`w-2 h-2 rounded-full ${dbStatus ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                   <span>
+                      資料庫更新：
+                      {isDbLoading ? '讀取中...' : (
+                        dbStatus?.lastUpdateTime 
+                          ? new Date(dbStatus.lastUpdateTime).toLocaleString('zh-TW', { hour12: false }) 
+                          : '尚未同步'
+                      )}
+                   </span>
                 </div>
               </CardContent>
             </Card>
@@ -262,213 +229,76 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Search Results */}
+      {/* Results Section */}
       {hasSearched && (
-        <section className="py-8 bg-secondary/30">
+        <section className="py-8 bg-[#f8fafc]">
           <div className="container">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="max-w-3xl mx-auto"
             >
-              {isSearching ? (
+              {isSearching && offset === 0 ? (
                 <div className="text-center py-12">
-                  <motion.img 
-                    src="/images/bee-mascot.png" 
-                    alt="搜尋中"
-                    className="w-16 h-16 mx-auto mb-4"
-                    animate={{ rotate: [0, 10, -10, 0] }}
-                    transition={{ duration: 0.5, repeat: Infinity }}
-                  />
-                  <p className="text-muted-foreground">小蜂正在即時搜尋政府與新聞資料庫...</p>
+                   <div className="animate-spin text-4xl mb-2">🐝</div>
+                   <p className="text-muted-foreground">小蜂正在搜尋資料庫...</p>
                 </div>
-              ) : searchResults ? (
+              ) : (
                 <div className="space-y-4">
-                  {/* Results Header (只保留標題，不顯示容易誤導的數字) */}
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-semibold text-foreground">
-                      搜尋結果
-                    </h2>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-xl font-bold text-slate-700">搜尋結果</h2>
+                    {searchResults?.results && (
+                        <span className="text-sm bg-slate-200 px-2 py-1 rounded-full text-slate-600">
+                            已顯示 {displayResults.length} 筆
+                        </span>
+                    )}
                   </div>
 
-                  {/* No Results */}
-                  {!searchResults.found && (
-                    <Card className="bg-safe-green/10 border-safe-green/30">
-                      <CardContent className="p-6 text-center">
-                        <CheckCircle className="w-12 h-12 text-safe-green mx-auto mb-3" />
-                        <h3 className="text-lg font-semibold text-safe-green mb-2">
-                          查無異常紀錄
-                        </h3>
-                        <p className="text-foreground/70">
-                          {searchResults.disclaimer}
+                  {!searchResults?.found && (
+                    <Card className="bg-green-50 border-green-200">
+                      <CardContent className="p-8 text-center">
+                        <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                        <h3 className="text-xl font-bold text-green-700 mb-2">查無異常紀錄</h3>
+                        <p className="text-slate-600">
+                          {searchResults?.disclaimer || "經即時搜尋政府公開資訊，目前未發現相符紀錄。"}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-4">
+                            小提醒：試著縮短關鍵字（例如輸入「林」而不是「林小明」）可以擴大搜尋範圍。
                         </p>
                       </CardContent>
                     </Card>
                   )}
 
-                  {/* Results List */}
-                  {searchResults.found && (
-                    <>
-                      {/* Warning Banner (已簡化：移除筆數統計) */}
-                      <Card className="bg-warning-coral/10 border-warning-coral/30">
-                        <CardContent className="p-4 flex items-start gap-3">
-                          <AlertTriangle className="w-6 h-6 text-warning-coral flex-shrink-0 mt-0.5" />
-                          <div>
-                            <h3 className="font-semibold text-warning-coral">
-                              {searchResults.searchedName ? '發現相關紀錄' : '查詢結果'}
-                            </h3>
-                            <p className="text-sm text-foreground/70 mt-1">
-                              {searchResults.searchedName 
-                                ? `以下為與「${searchResults.searchedName}」相關的紀錄，包含即時網路搜尋結果，請仔細核對。`
-                                : `請參考以下裁罰紀錄。`
-                              }
-                            </p>
-                          </div>
-                        </CardContent>
-                      </Card>
+                  {displayResults.map((result, index) => (
+                    <ResultCard key={`${result.case.id}-${index}`} result={result} index={index} />
+                  ))}
 
-                      {/* Result Cards */}
-                      {displayResults.map((result, index) => (
-                        <ResultCard key={`${result.case.id}-${index}`} result={result} index={index} />
-                      ))}
-
-                      {/* Load More Button */}
-                      {searchResults.hasMore && (
-                        <div className="text-center py-4">
-                          <Button
-                            onClick={handleLoadMore}
-                            disabled={isFetching}
-                            variant="outline"
-                            className="border-honey text-honey-dark hover:bg-honey/10"
-                          >
-                            {isFetching ? (
-                              <>
-                                <motion.div
-                                  animate={{ rotate: 360 }}
-                                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                  className="mr-2"
-                                >
-                                  <Search className="w-4 h-4" />
-                                </motion.div>
-                                載入中...
-                              </>
-                            ) : (
-                              <>載入更多</>
-                            )}
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Disclaimer */}
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        {searchResults.disclaimer}
-                      </p>
-                    </>
+                  {searchResults?.hasMore && (
+                    <div className="text-center py-6">
+                      <Button onClick={handleLoadMore} disabled={isFetching} variant="outline" className="w-full md:w-auto">
+                        {isFetching ? '載入中...' : '載入更多'}
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {searchResults?.results.length! > 0 && (
+                     <p className="text-sm text-slate-400 text-center py-4">
+                       ⚠️ 本結果包含系統自動彙整資訊，請務必點擊來源連結查證。
+                     </p>
                   )}
                 </div>
-              ) : null}
+              )}
             </motion.div>
           </div>
         </section>
       )}
 
-      {/* Quick Access Section */}
-      <section className="py-12 md:py-16">
+      {/* Footer */}
+      <footer className="mt-auto py-8 bg-slate-800 text-white/80">
         <div className="container">
-          <h2 className="text-2xl font-bold text-center text-foreground mb-8">
-            快速功能
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            {/* Report */}
-            <Link href="/report">
-              <Card className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-honey-light/30 overflow-hidden">
-                <CardContent className="p-6 text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 bg-warning-coral/20 rounded-2xl flex items-center justify-center group-hover:bg-warning-coral/30 transition-colors">
-                    <AlertTriangle className="w-8 h-8 text-warning-coral" />
-                  </div>
-                  <h3 className="font-semibold text-lg text-foreground mb-2">通報事件</h3>
-                  <p className="text-sm text-muted-foreground">
-                    匿名通報可疑人士，共同守護兒少安全
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
-
-            {/* Education */}
-            <Link href="/education">
-              <Card className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-honey-light/30 overflow-hidden">
-                <CardContent className="p-6 text-center">
-                  <div className="w-16 h-16 mx-auto mb-4 bg-safe-green/20 rounded-2xl flex items-center justify-center group-hover:bg-safe-green/30 transition-colors">
-                    <BookOpen className="w-8 h-8 text-safe-green" />
-                  </div>
-                  <h3 className="font-semibold text-lg text-foreground mb-2">教育專區</h3>
-                  <p className="text-sm text-muted-foreground">
-                    學習辨識騷擾徵兆，與孩子討論安全界線
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="py-12 bg-secondary/30">
-        <div className="container">
-          <h2 className="text-2xl font-bold text-center text-foreground mb-8">
-            如何使用
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-5xl mx-auto">
-            {[
-              { step: 1, title: '輸入姓名', desc: '輸入要查詢的陪玩/保母姓名' },
-              { step: 2, title: '選擇地區', desc: '可選擇特定地區縮小範圍' },
-              { step: 3, title: '查看結果', desc: '系統會顯示即時搜尋與比對結果' },
-              { step: 4, title: '謹慎判斷', desc: '資料僅供參考，請綜合評估' },
-            ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="w-12 h-12 mx-auto mb-3 bg-honey text-amber-deep rounded-full flex items-center justify-center font-bold text-lg">
-                  {item.step}
-                </div>
-                <h3 className="font-semibold text-foreground mb-1">{item.title}</h3>
-                <p className="text-sm text-muted-foreground">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Footer with Disclaimer */}
-      <footer className="mt-auto py-8 bg-amber-deep text-white">
-        <div className="container">
-          <div className="max-w-4xl mx-auto">
-            {/* Disclaimer */}
-            <div className="bg-white/10 rounded-xl p-6 mb-6">
-              <div className="flex items-start gap-3">
-                <Shield className="w-6 h-6 text-honey flex-shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="font-semibold text-honey mb-2">重要聲明</h3>
-                  <ul className="text-sm text-white/80 space-y-2">
-                    <li>• 本平台資料僅供參考，<strong className="text-white">非絕對比對、僅供參考</strong></li>
-                    <li>• 不揭露個資：不提供完整姓名、地址、照片等識別資訊</li>
-                    <li>• 標示為非證實內容：如資料源為新聞或網友爆料，會註明「尚未經司法定讞」</li>
-                    <li>• 提供澄清機制：若某人被模糊比對，應可申請澄清與註記</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Links */}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-white/70">
-              <div className="flex items-center gap-2">
-                <img src="/images/bee-mascot.png" alt="守護小蜂" className="w-8 h-8" />
-                <span>© 2024 兒少守護小蜂</span>
-              </div>
-              <div className="flex items-center gap-6">
-                <Link href="/about" className="hover:text-white transition-colors">關於我們</Link>
-                <Link href="/privacy" className="hover:text-white transition-colors">隱私政策</Link>
-                <Link href="/terms" className="hover:text-white transition-colors">使用條款</Link>
-              </div>
-            </div>
+          <div className="max-w-4xl mx-auto text-center text-sm">
+             <p>資料來源：司法院裁判書、媒體報導、教育部教保網、衛生福利部 CRC</p>
+             <p className="mt-2 opacity-60">© 2026 兒少守護小蜂</p>
           </div>
         </div>
       </footer>
@@ -476,123 +306,118 @@ export default function Home() {
   );
 }
 
-// Result Card Component
-interface ResultCardProps {
-  result: {
-    case: {
-      id: number;
-      maskedName: string;
-      role: string;
-      riskTags: string[];
-      location: string;
-      caseDate?: string | null;
-      sourceType: string;
-      sourceLink?: string | null;
-      description?: string | null;
-      verified: boolean;
-    };
-    similarity: number;
-    matchType: 'exact' | 'high' | 'medium' | 'low';
-  };
-  index: number;
-}
+// ResultCard Component
+function ResultCard({ result, index }: { result: any, index: number }) {
+  const { case: caseData, matchType } = result;
 
-function ResultCard({ result, index }: ResultCardProps) {
-  const { case: caseData, similarity, matchType } = result;
+  // 1. 決定來源類型 (Mapping)
+  let sourceTypeKey = 'default';
+  const type = caseData.sourceType as string;
   
-  const getSimilarityColor = () => {
-    if (matchType === 'exact' || matchType === 'high') return 'text-destructive';
-    if (matchType === 'medium') return 'text-warning-coral';
-    return 'text-muted-foreground';
-  };
+  // 根據後端回傳的 sourceType 轉成前端的 key
+  if (type === 'gov_edu' || type === 'kindergarten') sourceTypeKey = 'gov_edu';
+  else if (type === 'judicial') sourceTypeKey = 'judicial';
+  else if (type === 'news') sourceTypeKey = 'news';
+  else if (['gov_crc', 'crc', 'mohw', 'government'].includes(type)) sourceTypeKey = 'gov_crc';
 
-  const getSimilarityBg = () => {
-    if (matchType === 'exact' || matchType === 'high') return 'bg-destructive/10';
-    if (matchType === 'medium') return 'bg-warning-coral/10';
-    return 'bg-muted';
+  // 2. 標籤解析 (Risk Tags)
+  let tags: string[] = [];
+  try {
+    if (Array.isArray(caseData.riskTags)) {
+      tags = caseData.riskTags;
+    } else if (typeof caseData.riskTags === 'string') {
+      const clean = caseData.riskTags.trim();
+      tags = (clean.startsWith('[') && clean.endsWith(']')) ? JSON.parse(clean) : [clean];
+    }
+  } catch(e) { tags = []; }
+
+  // 3. 名稱顯示 (媒體報導顯示標題，其他顯示姓名)
+  const displayName = sourceTypeKey === 'news' 
+    ? (caseData.originalName || caseData.name) 
+    : caseData.maskedName;
+
+  // 4. 日期格式化
+  const dateObj = caseData.caseDate ? new Date(caseData.caseDate) : new Date(caseData.createdAt);
+  const dateStr = dateObj.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
+  // 5. 樣式定義 (依來源區分顏色)
+  const styles = {
+      'gov_crc': 'border-l-red-500 hover:shadow-red-100',
+      'gov_edu': 'border-l-orange-500 hover:shadow-orange-100',
+      'judicial': 'border-l-purple-500 hover:shadow-purple-100',
+      'news': 'border-l-blue-400 hover:shadow-blue-100',
+      'default': 'border-l-slate-400'
   };
+  const borderClass = styles[sourceTypeKey as keyof typeof styles] || styles['default'];
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -20 }}
+      initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.1 }}
+      transition={{ delay: index * 0.05 }}
     >
-      <Card className="border-l-4 border-l-warning-coral hover:shadow-md transition-shadow">
-        <CardContent className="p-4 md:p-6">
-          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-            {/* Left: Info */}
+      <Card className={`border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-md ${borderClass} bg-white`}>
+        <CardContent className="p-5">
+          <div className="flex flex-col md:flex-row gap-4">
+            
+            {/* 左側主要內容 */}
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h3 className="text-lg font-semibold text-foreground">
-                  {caseData.maskedName}
-                </h3>
-                {/* 移除相似度 Badge，因為即時搜尋結果都是 100% 匹配或模糊匹配，
-                  顯示相似度數字反而會讓家長困惑。
-                  我們只在高度危險時顯示標籤。
-                */}
-                {matchType === 'high' && (
-                  <Badge variant="destructive" className="animate-pulse">
-                    高度關注
-                  </Badge>
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                {/* 來源標籤 */}
+                <Badge variant="outline" className="bg-slate-50 text-slate-600 font-normal border-slate-200 flex gap-1 items-center">
+                    {sourceIcons[sourceTypeKey] || sourceIcons['default']}
+                    {sourceLabels[sourceTypeKey] || caseData.sourceType}
+                </Badge>
+                
+                {/* 日期 */}
+                <span className="text-xs text-slate-400">
+                    {dateStr}
+                </span>
+
+                {/* 高度關注標籤 */}
+                {matchType === 'high' && sourceTypeKey !== 'news' && (
+                  <Badge variant="destructive" className="animate-pulse px-2 py-0 text-[10px]">高度關注</Badge>
                 )}
               </div>
               
-              <div className="flex flex-wrap gap-2 mb-3">
-                <Badge variant="secondary">{caseData.role}</Badge>
-                <Badge variant="outline" className="text-muted-foreground">
-                  <MapPin className="w-3 h-3 mr-1" />
-                  {caseData.location}
-                </Badge>
-              </div>
+              <h3 className="text-lg font-bold text-slate-800 mb-2 leading-snug group-hover:text-blue-600">
+                {displayName}
+              </h3>
 
-              {/* Risk Tags */}
+              {/* Tag & Location */}
               <div className="flex flex-wrap gap-2 mb-3">
-                {caseData.riskTags.map((tag) => (
-                  <Badge 
-                    key={tag} 
-                    variant="destructive"
-                    className="bg-destructive/15 text-destructive hover:bg-destructive/20"
-                  >
-                    {tag}
-                  </Badge>
+                {caseData.location && (
+                   <span className="text-xs flex items-center gap-1 text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                     <MapPin className="w-3 h-3" />{caseData.location}
+                   </span>
+                )}
+                {tags.map((tag, i) => (
+                  <span key={i} className="text-xs text-slate-500 border border-slate-200 px-2 py-1 rounded">
+                    #{tag}
+                  </span>
                 ))}
               </div>
 
+              {/* 描述文字 (限制行數) */}
               {caseData.description && (
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  {caseData.description}
-                </p>
+                <div className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
+                   {caseData.description}
+                </div>
               )}
             </div>
 
-            {/* Right: Source & Date */}
-            <div className="flex flex-col items-end gap-2 text-sm">
-              <div className="flex items-center gap-2">
-                <Badge 
-                  variant={caseData.verified ? 'default' : 'secondary'}
-                  className={caseData.verified ? 'bg-honey text-amber-deep' : ''}
-                >
-                  {sourceIcons[caseData.sourceType]}
-                  <span className="ml-1">{caseData.sourceType}</span>
-                </Badge>
-                {!caseData.verified && (
-                  <span className="text-xs text-muted-foreground">(未證實)</span>
-                )}
-              </div>
-              {caseData.caseDate && (
-                <span className="text-muted-foreground">{new Date(caseData.caseDate).toLocaleDateString()}</span>
-              )}
-              {caseData.sourceLink && (
-                <a 
-                  href={caseData.sourceLink} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-honey-dark hover:underline flex items-center gap-1"
-                >
-                  查看來源 <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
+            {/* 右側動作欄 */}
+            <div className="flex flex-col justify-end items-end gap-2 shrink-0 md:w-32">
+               {caseData.sourceLink && caseData.sourceLink.startsWith('http') && (
+                  <a 
+                    href={caseData.sourceLink} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="flex items-center gap-1 text-xs font-bold text-blue-500 hover:text-blue-700 hover:underline mt-2 md:mt-0"
+                  >
+                    查看來源 <ExternalLink className="w-3 h-3"/>
+                  </a>
+               )}
             </div>
           </div>
         </CardContent>

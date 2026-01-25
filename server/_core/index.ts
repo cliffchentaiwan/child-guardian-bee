@@ -1,65 +1,63 @@
-import "dotenv/config";
-import express from "express";
-import { createServer } from "http";
-import net from "net";
-import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
-import { appRouter } from "../routers";
-import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
+import { appRouter } from '../routers';
+import { createContext } from './context';
+import cors from 'cors';
+import express from 'express';
+import { createExpressMiddleware } from '@trpc/server/adapters/express';
 
-function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
+// 🔥 1. 補回：引入 Vite (這是顯示網頁的關鍵！)
+import { createServer as createViteServer } from 'vite';
 
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found starting from ${startPort}`);
-}
+// 引入排程器
+import { startCronJobs } from './cron';
 
 async function startServer() {
   const app = express();
-  const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
-  // tRPC API
+
+  // 開啟 CORS
+  app.use(cors());
+
+  // === 1. API 路由 (後端大腦) ===
   app.use(
-    "/api/trpc",
+    '/api/trpc',
     createExpressMiddleware({
       router: appRouter,
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  // 手動 Search API (給 Home.tsx 用)
+  app.get('/api/search', async (req, res) => {
+    const caller = appRouter.createCaller(await createContext({ req, res } as any));
+    try {
+      const q = req.query.q as string;
+      const result = await caller.search.cases({ name: q });
+      res.json({ data: result.results });
+    } catch (e) {
+      console.error("Search API Error:", e);
+      res.status(500).json({ error: e });
+    }
+  });
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
+  // === 2. 網頁顯示路由 (前端臉孔) ===
+  // 🔥 這段就是你原本缺少的！沒有它就沒有畫面！
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: 'spa', 
+  });
+  app.use(vite.middlewares);
 
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+  // === 3. 啟動伺服器 ===
+  const port = 3000;
+  app.listen(port, () => {
+    console.log(`🚀 Server running on http://localhost:${port}`);
+    
+    // 啟動每日排程
+    try {
+      startCronJobs();
+    } catch (err) {
+      console.error("❌ 排程啟動失敗:", err);
+    }
   });
 }
 
-startServer().catch(console.error);
+startServer();

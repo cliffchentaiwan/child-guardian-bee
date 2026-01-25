@@ -1,295 +1,56 @@
-/**
- * 排程同步腳本
- * 
- * 用於每日凌晨自動同步司法院資料和新聞資料
- * 
- * 使用方式：
- * - 司法院同步（每日 0-6 時）：npx tsx server/scheduledSync.ts judicial
- * - 新聞同步（隨時可用）：npx tsx server/scheduledSync.ts news
- * - 政府資料同步（隨時可用）：npx tsx server/scheduledSync.ts gov
- * - 全部同步：npx tsx server/scheduledSync.ts all
- */
+// src/server/scheduledSync.ts
+import { exec } from 'child_process';
+import util from 'util';
+import path from 'path';
 
-import 'dotenv/config';
-import * as judicialApi from './judicialApi';
-import * as newsScraper from './newsScraper';
-import * as govDataScraper from './govDataScraper';
-import { drizzle } from 'drizzle-orm/mysql2';
-import { cases, dataSyncLogs } from '../drizzle/schema';
-import { eq } from 'drizzle-orm';
+const execPromise = util.promisify(exec);
 
-// 初始化資料庫連線
-const db = process.env.DATABASE_URL ? drizzle(process.env.DATABASE_URL) : null;
-
-/**
- * 插入案例到資料庫
- */
-async function insertCase(data: {
-  maskedName: string;
-  role: string;
-  riskTags: string[];
-  location: string;
-  date: string;
-  description: string;
-  sourceType: string;
-  sourceLink: string;
-  verified: boolean;
-  judicialJid?: string;
-}): Promise<void> {
-  if (!db) {
-    console.log('[模擬] 插入案例:', data.maskedName);
-    return;
-  }
-
+async function runCommand(scriptName: string) {
+  // 這裡我們組合完整的檔案路徑
+  const scriptPath = path.join(process.cwd(), 'src', 'server', 'scripts', scriptName);
+  console.log(`\n🤖 [自動排程] 正在執行：${scriptName}...`);
+  
   try {
-    // 檢查是否已存在（根據 sourceLink 或 judicialJid）
-    const existing = await db.select()
-      .from(cases)
-      .where(eq(cases.sourceLink, data.sourceLink))
-      .limit(1);
+    // 使用 npx tsx 來執行指定的腳本
+    const { stdout, stderr } = await execPromise(`npx tsx "${scriptPath}"`);
+    
+    // 印出該腳本的輸出結果
+    if (stdout) console.log(stdout);
+    if (stderr && !stderr.includes('Debugger attached')) console.error(stderr); // 過濾掉無關的 debug 訊息
+    
+    console.log(`✅ [自動排程] ${scriptName} 執行完畢。`);
+    return true;
+  } catch (error: any) {
+    console.error(`❌ [自動排程] ${scriptName} 失敗：`, error.message);
+    if (error.stdout) console.log(error.stdout);
+    if (error.stderr) console.error(error.stderr);
+    return false;
+  }
+}
 
-    if (existing.length > 0) {
-      console.log(`[跳過] 案例已存在: ${data.maskedName}`);
+export async function runCRCSyncTask() {
+  console.log("⏰ 啟動 CRC 每日同步任務 (爬蟲 + 入庫)...");
+  const startTime = Date.now();
+
+  // 1. 執行爬蟲 (抓取最新資料)
+  const crawlSuccess = await runCommand('crawlCRC_Real.ts');
+  if (!crawlSuccess) {
+      console.log("⚠️ 爬蟲失敗，為了安全起見，中止入庫作業。");
       return;
-    }
-
-    await db.insert(cases).values({
-      maskedName: data.maskedName,
-      role: data.role as any,
-      riskTags: data.riskTags,
-      location: data.location,
-      caseDate: data.date,
-      description: data.description,
-      sourceType: data.sourceType as any,
-      sourceLink: data.sourceLink,
-      verified: data.verified,
-      judicialJid: data.judicialJid,
-    });
-    
-    console.log(`[新增] ${data.maskedName} - ${data.riskTags.join(', ')}`);
-  } catch (error) {
-    console.error('[錯誤] 插入案例失敗:', error);
   }
+
+  // 2. 執行入庫 (寫入資料庫)
+  const seedSuccess = await runCommand('seedCRC.ts');
+  if (!seedSuccess) {
+      console.log("⚠️ 入庫失敗，請檢查資料庫連線。");
+      return;
+  }
+
+  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`\n🎉 CRC 同步任務全數完成！總耗時 ${duration} 秒。`);
 }
 
-/**
- * 記錄同步結果
- */
-async function logSync(data: {
-  source: string;
-  status: string;
-  recordsAdded: number;
-  errorMessage?: string;
-}): Promise<void> {
-  if (!db) {
-    console.log('[模擬] 記錄同步:', data);
-    return;
-  }
-
-  try {
-    await db.insert(dataSyncLogs).values({
-      sourceName: data.source,
-      status: data.status as 'running' | 'success' | 'failed',
-      recordCount: data.recordsAdded,
-      errorMessage: data.errorMessage,
-    });
-  } catch (error) {
-    console.error('[錯誤] 記錄同步失敗:', error);
-  }
+// 讓這支程式可以直接被執行
+if (process.argv[1] === import.meta.filename || process.argv[1].endsWith('scheduledSync.ts')) {
+    runCRCSyncTask();
 }
-
-/**
- * 同步司法院資料
- */
-async function syncJudicial(): Promise<void> {
-  console.log('\n========================================');
-  console.log('開始同步司法院資料...');
-  console.log('========================================\n');
-
-  // 檢查服務時間
-  const status = judicialApi.getServiceStatus();
-  if (!status.available) {
-    console.log(`[警告] ${status.message}`);
-    if (status.nextAvailable) {
-      console.log(`[提示] ${status.nextAvailable}`);
-    }
-    
-    await logSync({
-      source: 'judicial',
-      status: 'skipped',
-      recordsAdded: 0,
-      errorMessage: status.message,
-    });
-    
-    return;
-  }
-
-  console.log('[狀態] 司法院 API 服務中...');
-
-  const result = await judicialApi.syncJudicialData(
-    async (data) => {
-      await insertCase({
-        maskedName: data.name,
-        role: data.role,
-        riskTags: data.riskTags,
-        location: data.location || '未知',
-        date: data.date,
-        description: data.description,
-        sourceType: data.sourceType,
-        sourceLink: data.sourceLink,
-        verified: data.verified,
-        judicialJid: data.jid,
-      });
-    },
-    (current, total, message) => {
-      if (current % 10 === 0 || current === total) {
-        console.log(`[進度] ${current}/${total} - ${message}`);
-      }
-    }
-  );
-
-  await logSync({
-    source: 'judicial',
-    status: result.success ? 'success' : 'failed',
-    recordsAdded: result.childRelated,
-    errorMessage: result.error,
-  });
-
-  console.log('\n========================================');
-  console.log(`司法院同步完成：處理 ${result.synced} 筆，新增 ${result.childRelated} 筆兒少相關案件`);
-  if (result.errors > 0) {
-    console.log(`[警告] 發生 ${result.errors} 個錯誤`);
-  }
-  console.log('========================================\n');
-}
-
-/**
- * 同步新聞資料
- */
-async function syncNews(): Promise<void> {
-  console.log('\n========================================');
-  console.log('開始同步新聞資料...');
-  console.log('========================================\n');
-
-  console.log('[狀態] 新聞爬蟲啟動中...');
-  console.log(`[來源] ${newsScraper.NEWS_SOURCES.map(s => s.name).filter((v, i, a) => a.indexOf(v) === i).join(', ')}`);
-
-  const result = await newsScraper.syncNewsData(
-    async (data) => {
-      await insertCase({
-        maskedName: data.maskedName,
-        role: data.role,
-        riskTags: data.riskTags,
-        location: data.location || '未知',
-        date: data.date,
-        description: data.description,
-        sourceType: data.sourceType,
-        sourceLink: data.sourceLink,
-        verified: data.verified,
-      });
-    },
-    (current, total, message) => {
-      if (current % 5 === 0 || current === total) {
-        console.log(`[進度] ${current}/${total} - ${message}`);
-      }
-    }
-  );
-
-  await logSync({
-    source: 'news',
-    status: result.success ? 'success' : 'failed',
-    recordsAdded: result.childRelated,
-    errorMessage: result.error,
-  });
-
-  console.log('\n========================================');
-  console.log(`新聞同步完成：抓取 ${result.synced} 則，新增 ${result.childRelated} 筆兒少相關新聞`);
-  if (result.errors > 0) {
-    console.log(`[警告] 發生 ${result.errors} 個錯誤`);
-  }
-  console.log('========================================\n');
-}
-
-/**
- * 同步政府資料
- */
-async function syncGov(): Promise<void> {
-  console.log('\n========================================');
-  console.log('開始同步政府資料...');
-  console.log('========================================\n');
-
-  const sources = govDataScraper.getGovDataSourcesStatus();
-  console.log('[狀態] 政府資料爬蟲啟動中...');
-  console.log(`[來源] ${sources.sources.map(s => s.name).join(', ')}`);
-
-  const result = await govDataScraper.syncAllGovData(
-    async (record) => {
-      await insertCase({
-        maskedName: record.maskedName,
-        role: record.role,
-        riskTags: record.riskTags,
-        location: record.location || '未知',
-        date: record.penaltyDate,
-        description: record.description,
-        sourceType: record.sourceType,
-        sourceLink: record.sourceLink,
-        verified: true,
-      });
-    },
-    (current, total, message) => {
-      console.log(`[進度] ${current}/${total} - ${message}`);
-    }
-  );
-
-  await logSync({
-    source: 'gov',
-    status: result.success ? 'success' : 'failed',
-    recordsAdded: result.added,
-    errorMessage: result.error,
-  });
-
-  console.log('\n========================================');
-  console.log(`政府資料同步完成：抓取 ${result.synced} 筆，新增 ${result.added} 筆`);
-  if (result.errors > 0) {
-    console.log(`[警告] 發生 ${result.errors} 個錯誤`);
-  }
-  console.log('========================================\n');
-}
-
-/**
- * 主程式
- */
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const source = args[0] || 'all';
-
-  console.log('\n╔════════════════════════════════════════╗');
-  console.log('║     兒少守護小蜂 - 資料同步程式        ║');
-  console.log('╚════════════════════════════════════════╝');
-  console.log(`\n[時間] ${new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}`);
-  console.log(`[模式] ${source}`);
-  console.log(`[資料庫] ${db ? '已連線' : '未連線（模擬模式）'}`);
-
-  try {
-    if (source === 'judicial' || source === 'all') {
-      await syncJudicial();
-    }
-
-    if (source === 'news' || source === 'all') {
-      await syncNews();
-    }
-
-    if (source === 'gov' || source === 'all') {
-      await syncGov();
-    }
-
-    console.log('\n[完成] 所有同步任務已完成！');
-  } catch (error) {
-    console.error('\n[錯誤] 同步過程發生錯誤:', error);
-    process.exit(1);
-  }
-
-  process.exit(0);
-}
-
-main();
