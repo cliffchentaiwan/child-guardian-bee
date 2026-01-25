@@ -221,7 +221,4 @@ async function autoScroll(page: any) {
 // 匯出函數供外部呼叫
 export { crawlNewsFinal };
 
-// 如果直接執行此檔案 (npx tsx ...) 則執行主程式
-if (import.meta.url === `file://${process.argv[1]}`) {
-    crawlNewsFinal();
-}
+

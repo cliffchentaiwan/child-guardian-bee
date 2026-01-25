@@ -213,7 +213,3 @@ async function crawlCRC() {
 
 export { crawlCRC };
 
-// 支援直接執行
-if (import.meta.url === `file://${process.argv[1]}`) {
-    crawlCRC().then(() => process.exit(0));
-}
