@@ -21,10 +21,16 @@ const KEYWORDS = [
 async function crawlNewsFinal() {
   console.log("📰 [雙引擎新聞爬蟲] 啟動！優先 Yahoo，失敗自動切換 Google...");
   
+  // 🔥 關鍵修正：針對 Render 雲端環境的最佳化設定
   const browser = await puppeteer.launch({
-    headless: false, // 設為 false 方便您監控爬蟲行為
+    headless: true, // ⚠️ 必須設為 true，因為雲端主機沒有螢幕
     defaultViewport: null,
-    args: ['--start-maximized', '--no-sandbox']
+    args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage', // 避免記憶體不足
+        '--disable-gpu'
+    ]
   });
 
   const page = await browser.newPage();
@@ -55,7 +61,6 @@ async function crawlNewsFinal() {
                 const existing = await db.select().from(cases).where(eq(cases.sourceLink, uniqueId));
                 
                 if (existing.length === 0) {
-                    // 🔥 關鍵修正：欄位對應新版 Schema
                     await db.insert(cases).values({
                         maskedName: item.source || '網路新聞', // 在列表顯示媒體名稱 (如：Yahoo新聞)
                         name: item.title,                      // 通用名稱存標題 (如：藝人黃子佼...)
@@ -98,7 +103,10 @@ async function crawlNewsFinal() {
     console.error("❌ 嚴重錯誤:", error.message);
   } finally {
     await browser.close();
-    process.exit(0);
+    // 只有在直接執行時才退出，避免影響被呼叫的情況
+    if (import.meta.url === `file://${process.argv[1]}`) {
+        process.exit(0);
+    }
   }
 }
 
