@@ -1,21 +1,15 @@
 import nodemailer from 'nodemailer';
 
-// 🔥 改用 Port 587 (STARTTLS)，這是防毒軟體或防火牆最不容易擋的 Port
+// 🔥 回歸最單純的設定
+// 因為我們已經修復了密碼空格問題，讓 Nodemailer 自動處理 Gmail 的複雜連線機制是最穩的
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // 587 埠必須設為 false，它會自動升級成加密連線
+    service: 'gmail',
     auth: {
         user: process.env.GMAIL_USER, 
         pass: process.env.GMAIL_PASS, 
     },
-    tls: {
-        rejectUnauthorized: false // 允許某些憑證寬容度，避免太嚴格被擋
-    },
-    // 增加詳細日誌，如果失敗可以看到是哪一步卡住
-    logger: true,
-    debug: true, 
-    connectionTimeout: 15000, // 放寬到 15 秒
+    // 加上這行：強制使用 IPv4 (有些雲端環境 IPv6 會爛掉)
+    family: 4, 
 });
 
 export async function sendNotificationEmail(report: {
@@ -27,7 +21,7 @@ export async function sendNotificationEmail(report: {
     const recipients = ['crazy555059@gmail.com', 'a09552871010731@gmail.com'];
     const subject = `🚨 [兒少通報] 發現可疑人士：${report.suspectName}`;
     
-    // HTML 內容 (保持原樣)
+    // HTML 內容
     const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
         <div style="background-color: #F59E0B; padding: 16px; text-align: center;">
@@ -43,7 +37,7 @@ export async function sendNotificationEmail(report: {
     `;
 
     try {
-        console.log(`📧 [系統] 嘗試透過 Port 587 寄信給: ${recipients.join(', ')}`);
+        console.log(`📧 [系統] 嘗試使用 service: 'gmail' 寄信給: ${recipients.join(', ')}`);
         
         const info = await transporter.sendMail({
             from: `"兒少守護小蜂" <${process.env.GMAIL_USER}>`, 
@@ -55,7 +49,7 @@ export async function sendNotificationEmail(report: {
         console.log('✅ Email 寄送成功！Message ID:', info.messageId);
         return true;
     } catch (error: any) {
-        console.error('❌ Email 寄送失敗:', error);
+        console.error('❌ Email 寄送失敗:', error.message);
         return false;
     }
 }
