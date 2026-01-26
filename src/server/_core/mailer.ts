@@ -1,16 +1,21 @@
 import nodemailer from 'nodemailer';
 
-// 🔥 改用明確的 host 與 port 設定，解決 Timeout 問題
+// 🔥 改用 Port 587 (STARTTLS)，這是防毒軟體或防火牆最不容易擋的 Port
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // 使用 SSL 加密連線
+    port: 587,
+    secure: false, // 587 埠必須設為 false，它會自動升級成加密連線
     auth: {
         user: process.env.GMAIL_USER, 
         pass: process.env.GMAIL_PASS, 
     },
-    // 增加連線逾時設定，避免轉圈轉太久 (設為 10秒)
-    connectionTimeout: 10000, 
+    tls: {
+        rejectUnauthorized: false // 允許某些憑證寬容度，避免太嚴格被擋
+    },
+    // 增加詳細日誌，如果失敗可以看到是哪一步卡住
+    logger: true,
+    debug: true, 
+    connectionTimeout: 15000, // 放寬到 15 秒
 });
 
 export async function sendNotificationEmail(report: {
@@ -19,12 +24,10 @@ export async function sendNotificationEmail(report: {
     description: string;
     reporterIp: string;
 }) {
-    // 您的收件者
     const recipients = ['crazy555059@gmail.com', 'a09552871010731@gmail.com'];
-
     const subject = `🚨 [兒少通報] 發現可疑人士：${report.suspectName}`;
     
-    // HTML 內容 (維持您原本漂亮的樣式)
+    // HTML 內容 (保持原樣)
     const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
         <div style="background-color: #F59E0B; padding: 16px; text-align: center;">
@@ -40,7 +43,7 @@ export async function sendNotificationEmail(report: {
     `;
 
     try {
-        console.log(`📧 [系統] 準備透過 Port 465 寄信給: ${recipients.join(', ')}`);
+        console.log(`📧 [系統] 嘗試透過 Port 587 寄信給: ${recipients.join(', ')}`);
         
         const info = await transporter.sendMail({
             from: `"兒少守護小蜂" <${process.env.GMAIL_USER}>`, 
@@ -52,8 +55,7 @@ export async function sendNotificationEmail(report: {
         console.log('✅ Email 寄送成功！Message ID:', info.messageId);
         return true;
     } catch (error: any) {
-        console.error('❌ Email 寄送失敗:', error.message);
-        // 如果是 Timeout，可以在這裡看到更清楚的原因
+        console.error('❌ Email 寄送失敗:', error);
         return false;
     }
 }
