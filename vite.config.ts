@@ -1,12 +1,12 @@
+// vite.config.ts
 import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import fs from "node:fs";
 import path from "path";
 import { defineConfig } from "vite";
-import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime()];
+// 🔥 關鍵修改：移除了 vitePluginManusRuntime，這樣黑色橫幅就會消失！
+const plugins = [react(), tailwindcss(), jsxLocPlugin()];
 
 export default defineConfig({
   plugins,
@@ -26,7 +26,7 @@ export default defineConfig({
   },
   server: {
     host: true,
-    // 🔥 修改這裡：直接改成 true，允許 Render 的網址連線
+    // 🔥 關鍵設定：允許 Render 網址連線，避免出現 Blocked request
     allowedHosts: true, 
     fs: {
       strict: true,
