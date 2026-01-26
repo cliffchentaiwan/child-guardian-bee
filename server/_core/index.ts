@@ -1,23 +1,21 @@
 // server/_core/index.ts
-import { appRouter } from '../routers';
+import { appRouter } from '../routers'; // 指向 server/routers.ts
 import { createContext } from './context';
 import cors from 'cors';
 import express from 'express';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
-
-// 🔥 1. 顯示網頁的關鍵：Vite
 import { createServer as createViteServer } from 'vite';
 
-// ⏰ 2. 排程系統 (負責半夜偷跑爬蟲)
+// ⏰ 排程設定 (只引入設定函式，不引入爬蟲本身)
 import { startCronJobs } from './cron';
 
 async function startServer() {
   const app = express();
 
-  // 開啟 CORS
+  // 開啟 CORS，允許前端連線
   app.use(cors());
 
-  // === 3. API 路由 (後端大腦 - 搜尋功能靠這裡) ===
+  // === 後端 API 路由 (tRPC) ===
   app.use(
     '/api/trpc',
     createExpressMiddleware({
@@ -26,10 +24,9 @@ async function startServer() {
     })
   );
 
-  // 手動 Search API (給 Home.tsx 用的備用搜尋)
+  // 備用 Search API (給 Home.tsx 用)
   app.get('/api/search', async (req, res) => {
     try {
-        // 簡單的防呆處理，避免 context 建立失敗導致崩潰
         const ctx = await createContext({ req, res } as any);
         const caller = appRouter.createCaller(ctx);
         const q = req.query.q as string;
@@ -41,30 +38,26 @@ async function startServer() {
     }
   });
 
-  // === 4. 網頁顯示路由 (前端臉孔 - 漂亮介面靠這裡) ===
+  // === 前端網頁路由 (Vite Middleware) ===
   const vite = await createViteServer({
     server: { middlewareMode: true },
     appType: 'spa', 
   });
   app.use(vite.middlewares);
 
-  // === 5. 啟動伺服器 ===
-  // Render 會提供 PORT 環境變數，如果沒有就用 3000
+  // === 啟動伺服器 ===
   const port = process.env.PORT || 3000;
   
   app.listen(port, () => {
     console.log(`🚀 Server running on port ${port}`);
     
-    // ✅ 啟動排程 (正確！設定鬧鐘半夜跑)
+    // ✅ 正確：只啟動排程計時器 (鬧鐘)，不直接跑爬蟲
     try {
       startCronJobs();
       console.log("⏰ 排程系統已就緒 (每日 03:00 執行)");
     } catch (err) {
       console.error("❌ 排程啟動失敗:", err);
     }
-
-    // ❌ 這裡【絕對沒有】 crawlNewsFinal() 
-    // 這樣 Render 啟動時才不會因為開瀏覽器而爆掉記憶體！
   });
 }
 
