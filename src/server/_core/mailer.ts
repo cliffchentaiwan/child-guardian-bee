@@ -1,22 +1,16 @@
-// src/server/_core/mailer.ts
 import nodemailer from 'nodemailer';
 
-// 🔥 Debug: 印出環境變數狀態 (只印前幾碼，不要印出完整密碼)
-const user = process.env.GMAIL_USER;
-const pass = process.env.GMAIL_PASS;
-
-console.log("------------------------------------------------");
-console.log("📧 Mailer 初始化檢查:");
-console.log(`   User: ${user ? user : '❌ 未設定'}`);
-console.log(`   Pass: ${pass ? '✅ 已設定 (長度: ' + pass.length + ')' : '❌ 未設定'}`);
-console.log("------------------------------------------------");
-
+// 🔥 改用明確的 host 與 port 設定，解決 Timeout 問題
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // 使用 SSL 加密連線
     auth: {
-        user: user,
-        pass: pass,
+        user: process.env.GMAIL_USER, 
+        pass: process.env.GMAIL_PASS, 
     },
+    // 增加連線逾時設定，避免轉圈轉太久 (設為 10秒)
+    connectionTimeout: 10000, 
 });
 
 export async function sendNotificationEmail(report: {
@@ -30,24 +24,26 @@ export async function sendNotificationEmail(report: {
 
     const subject = `🚨 [兒少通報] 發現可疑人士：${report.suspectName}`;
     
-    // HTML 內容保持不變，為了版面簡潔我省略 HTML code，請用您原本的即可，或是下面這段簡易版
+    // HTML 內容 (維持您原本漂亮的樣式)
     const htmlContent = `
-        <h2>🚨 新通報通知</h2>
-        <p><strong>嫌疑人:</strong> ${report.suspectName}</p>
-        <p><strong>地點:</strong> ${report.location || '未提供'}</p>
-        <p><strong>描述:</strong> ${report.description}</p>
-        <p><strong>來源 IP:</strong> ${report.reporterIp}</p>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #F59E0B; padding: 16px; text-align: center;">
+            <h2 style="color: white; margin: 0;">🐝 兒少守護小蜂 - 新通報通知</h2>
+        </div>
+        <div style="padding: 24px; background-color: #FFFBF0;">
+            <p><strong>嫌疑人：</strong> ${report.suspectName}</p>
+            <p><strong>地點：</strong> ${report.location || '未提供'}</p>
+            <p><strong>描述：</strong> ${report.description}</p>
+            <p style="font-size: 12px; color: #888;">來源 IP: ${report.reporterIp}</p>
+        </div>
+    </div>
     `;
 
     try {
-        console.log(`📧 [系統] 準備寄信給: ${recipients.join(', ')}`);
+        console.log(`📧 [系統] 準備透過 Port 465 寄信給: ${recipients.join(', ')}`);
         
-        if (!user || !pass) {
-            throw new Error("GMAIL_USER 或 GMAIL_PASS 環境變數未設定！無法寄信。");
-        }
-
         const info = await transporter.sendMail({
-            from: `"兒少守護小蜂" <${user}>`, 
+            from: `"兒少守護小蜂" <${process.env.GMAIL_USER}>`, 
             to: recipients.join(', '), 
             subject: subject,
             html: htmlContent, 
@@ -57,7 +53,7 @@ export async function sendNotificationEmail(report: {
         return true;
     } catch (error: any) {
         console.error('❌ Email 寄送失敗:', error.message);
-        // 這裡我們還是不 throw error，以免影響使用者體驗，但 Log 會紀錄失敗原因
+        // 如果是 Timeout，可以在這裡看到更清楚的原因
         return false;
     }
 }
