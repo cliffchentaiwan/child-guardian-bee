@@ -69,7 +69,7 @@ async function crawlNewsFinal() {
             let items = await scrapeYahoo(page, keyword);
             
             if (items.length === 0) {
-                console.log(`   ⚠️ Yahoo 找不到或超時，切換 Google...`);
+                console.log(`   ⚠️ Yahoo 找不到或太慢，切換 Google...`);
                 items = await scrapeGoogle(page, keyword);
             }
 
@@ -141,22 +141,21 @@ async function crawlNewsFinal() {
     }
 }
 
-// Yahoo 爬蟲函式 (Lite 版)
+// Yahoo 爬蟲函式 (快速放棄版)
 async function scrapeYahoo(page: any, keyword: string) {
     const targetUrl = `https://tw.news.yahoo.com/search?p=${encodeURIComponent(keyword)}`;
     try {
-        // Timeout 設為 60秒
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // 🔥 Timeout 改回 30秒，抓不到就趕快換 Google，不要空等
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         
         // 嘗試等待
-        try { await page.waitForSelector('li.StreamMegaItem', { timeout: 10000 }); } catch(e) {}
+        try { await page.waitForSelector('li.StreamMegaItem', { timeout: 5000 }); } catch(e) {}
 
         return await page.evaluate(() => {
             const results: any[] = [];
             document.querySelectorAll('li.StreamMegaItem').forEach(item => {
                 const titleEl = item.querySelector('h3 a');
                 const descEl = item.querySelector('p');
-                // 嘗試抓來源
                 const sourceEl = item.querySelector('.Source, .publisher');
 
                 if (titleEl) {
@@ -173,7 +172,7 @@ async function scrapeYahoo(page: any, keyword: string) {
             return results;
         });
     } catch (e: any) {
-        console.log(`   ❌ Yahoo 抓取錯誤: ${e.message}`);
+        // 這裡不印出錯誤 Stack，讓 Log 乾淨一點
         return [];
     }
 }
@@ -182,7 +181,7 @@ async function scrapeYahoo(page: any, keyword: string) {
 async function scrapeGoogle(page: any, keyword: string) {
     const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}&tbm=nws`;
     try {
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 }); // Google 給多一點時間
 
         return await page.evaluate(() => {
             const results: any[] = [];
@@ -210,6 +209,10 @@ async function scrapeGoogle(page: any, keyword: string) {
     }
 }
 
+// 🔥🔥 這裡就是重點！加上 export 讓 cron.ts 找得到它 🔥🔥
+export { crawlNewsFinal };
+
+// 保持這段，讓你手動也能跑
 if (import.meta.url === `file://${process.argv[1]}`) {
     crawlNewsFinal();
 }
