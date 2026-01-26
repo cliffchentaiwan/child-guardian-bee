@@ -8,19 +8,15 @@ import { eq } from 'drizzle-orm';
 async function crawlCRC() {
   console.log("🛡️ [CRC 兒少裁罰] 啟動！正在為您收割全台裁罰資料...");
   
-  // 🔥 Render 專用：極限省記憶體設定
   const browser = await puppeteer.launch({
-    headless: true, // 雲端必備：無頭模式
+    headless: true,
     defaultViewport: null,
     args: [
+        '--start-maximized', 
         '--no-sandbox', 
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage', // 關鍵：避免 Docker 記憶體不足
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process', // ⚠️ 關鍵：強制單一進程，大幅降低記憶體消耗
-        '--disable-extensions'
+        '--disable-dev-shm-usage',
+        '--disable-gpu'
     ]
   });
 
@@ -28,7 +24,6 @@ async function crawlCRC() {
 
   try {
     const page = await browser.newPage();
-    // 偽裝成一般使用者
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 
     console.log("📄 前往 CRC 網站...");
@@ -38,8 +33,6 @@ async function crawlCRC() {
     console.log("🤖 執行自動搜尋...");
     
     let searchClicked = false;
-    
-    // 策略：掃描所有 Frame 嘗試操作
     for (const frame of page.frames()) {
         const btn = await frame.$('.searchBtn') || await frame.$('input[value="查詢"]');
         if (btn) {
@@ -77,7 +70,6 @@ async function crawlCRC() {
     while (hasNextPage) {
         console.log(`\n📄 [第 ${pageNum} 頁] 掃描中...`);
 
-        // 1. 抓取純文字
         const fullText = await page.evaluate(() => document.body.innerText);
         const tokens = fullText.split(/\s+/);
         const items: any[] = [];
@@ -86,13 +78,13 @@ async function crawlCRC() {
         let currentLocation = '';
         let currentReasonBuffer = '';
 
-        // 2. 解析邏輯
         for (let i = 0; i < tokens.length; i++) {
             const token = tokens[i].trim();
             if (cities.includes(token)) {
                 currentLocation = token;
                 const nextToken = tokens[i+1];
-                if (nextToken && nextToken.length >= 2 && nextToken.length <= 5 && !cities.includes(nextToken)) {
+                // 🔥 這裡已放寬到 20 字，確保能抓到「私立人愛幼兒園」
+                if (nextToken && nextToken.length >= 2 && nextToken.length <= 20 && !cities.includes(nextToken)) {
                     currentName = nextToken;
                     currentReasonBuffer = ''; 
                 }
@@ -106,7 +98,6 @@ async function crawlCRC() {
                     let reason = currentReasonBuffer.replace(/違反|第\d+條|規定/g, '').trim();
                     if (reason.length === 0) reason = '詳見公告';
                     
-                    // 去重檢查 (本頁內)
                     const exists = items.find(it => it.name === currentName && it.date === date);
                     if (!exists) {
                         items.push({ name: currentName, location: currentLocation, date: date, reason: reason });
@@ -119,15 +110,16 @@ async function crawlCRC() {
         console.log(`   👀 本頁發現 ${items.length} 筆資料...`);
         if (items.length > 0) process.stdout.write("      ");
 
-        // 3. 寫入資料庫
+        // 🔥🔥🔥 補回漏掉的這一行！ 🔥🔥🔥
         let newThisPage = 0;
+
         for (const item of items) {
             try {
                 let dateStr = item.date.replace(/\./g, '/');
                 const parts = dateStr.split('/');
                 let year = parseInt(parts[0]);
                 if (year < 1911) year += 1911;
-                const finalDate = `${year}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`; // 格式: 2024-01-01
+                const finalDate = `${year}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
                 
                 const uniqueId = `CRC_${item.name}_${finalDate}`;
                 const existing = await db.select().from(cases).where(eq(cases.sourceLink, uniqueId));
@@ -139,8 +131,8 @@ async function crawlCRC() {
                         originalName: item.name,
                         role: '個人/機構',
                         riskTags: JSON.stringify(['兒少權益法', '裁罰']),
-                        location: item.location || '全台', // 這裡會讓選單抓到！
-                        caseDate: finalDate, // 存入標準格式
+                        location: item.location || '全台',
+                        caseDate: finalDate,
                         description: `違規內容：${item.reason}`,
                         sourceType: 'gov_crc',
                         sourceLink: uniqueId,
@@ -157,7 +149,6 @@ async function crawlCRC() {
         totalNewCount += newThisPage;
         console.log(""); 
 
-        // 4. 自動翻頁
         console.log("   🔄 翻頁中...");
         const autoSuccess = await page.evaluate((currentPage) => {
             const links = Array.from(document.querySelectorAll('a, button, li, input[type="button"]'));
@@ -187,10 +178,9 @@ async function crawlCRC() {
         }
     }
 
-    // 紀錄 Log
     if (totalNewCount >= 0) {
         await db.insert(dataSyncLogs).values({
-            sourceName: 'gov_crc', // 統一用這個名稱
+            sourceName: 'gov_crc',
             status: 'success',
             recordCount: totalNewCount,
             startedAt: new Date(),
@@ -204,7 +194,6 @@ async function crawlCRC() {
     console.error("❌ CRC 錯誤:", error.message);
   } finally {
     await browser.close();
-    // 只有在直接執行時才退出，避免影響被呼叫的情況
     if (import.meta.url === `file://${process.argv[1]}`) {
         process.exit(0);
     }
@@ -213,3 +202,6 @@ async function crawlCRC() {
 
 export { crawlCRC };
 
+if (import.meta.url === `file://${process.argv[1]}`) {
+    crawlCRC().then(() => process.exit(0));
+}

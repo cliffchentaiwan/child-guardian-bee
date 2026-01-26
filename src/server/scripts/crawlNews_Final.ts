@@ -5,8 +5,8 @@ import { db } from '../db';
 import { cases, dataSyncLogs } from '../schema';
 import { eq } from 'drizzle-orm';
 
-// 關鍵字列表 (專注於行為與罪名，而非特定人名)
-const KEYWORDS = [
+// 1. 搜尋用的廣泛關鍵字 (給搜尋引擎用的)
+const SEARCH_KEYWORDS = [
     '兒少性剝削', 
     '拍攝未成年', 
     '違反兒少法', 
@@ -15,44 +15,66 @@ const KEYWORDS = [
     '補習班 性騷擾',
     '狼師',
     '托嬰中心 虐待',
-    '持有兒少性影像' // 針對近期重大案件增加
+    '持有兒少性影像'
 ]; 
 
+// 🔥 2. [新增] 嚴格驗證關鍵字 (標題必須包含這些詞之一，才准進入資料庫)
+// 這樣可以過濾掉「台積電」、「股市」、「藝人八卦」等無關新聞
+const VALIDATION_KEYWORDS = [
+    '性剝削', '性騷', '猥褻', '性侵', '偷拍', '私密',
+    '虐童', '虐待', '霸凌', '體罰', '不當管教', '呼巴掌', '餵藥',
+    '幼兒園', '托嬰', '保母', '教保', '狼師', '補習班', '園長',
+    '兒少', '未成年', '女童', '男童', '學生',
+    '開罰', '裁罰', '違規', '停業', '撤照', '起訴', '判刑'
+];
+
 async function crawlNewsFinal() {
-  console.log("📰 [雙引擎新聞爬蟲] 啟動！優先 Yahoo，失敗自動切換 Google...");
+  console.log("📰 [雙引擎新聞爬蟲] 啟動！(嚴格過濾模式)...");
   
-  // 🔥 關鍵修正：針對 Render 雲端環境的最佳化設定
+  // 針對 Mac 本地執行優化，但保留對 Render 的相容性
   const browser = await puppeteer.launch({
-    headless: true, // ⚠️ 必須設為 true，因為雲端主機沒有螢幕
+    headless: true, // 改回 true 比較快，想看畫面改成 false
     defaultViewport: null,
     args: [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage', // 避免記憶體不足
-        '--disable-gpu'
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--single-process' // 省記憶體
     ]
   });
 
   const page = await browser.newPage();
-  // 偽裝 User-Agent
   await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
   let totalNewCount = 0;
 
   try {
-    for (const keyword of KEYWORDS) {
-        console.log(`\n🔍 關鍵字：${keyword}`);
+    for (const keyword of SEARCH_KEYWORDS) {
+        console.log(`\n🔍 搜尋關鍵字：${keyword}`);
         
-        // --- 第一階段：嘗試 Yahoo (速度快，干擾少) ---
+        // --- 第一階段：Yahoo ---
         let items = await scrapeYahoo(page, keyword);
         
-        // --- 第二階段：如果 Yahoo 沒抓到，切換 Google ---
+        // --- 第二階段：Google (備援) ---
         if (items.length === 0) {
-            console.log("   ⚠️ Yahoo 找不到資料，啟動 Google 備援引擎...");
+            console.log("   ⚠️ Yahoo 找不到資料，切換 Google...");
             items = await scrapeGoogle(page, keyword);
         }
 
-        console.log(`   👀 最終找到 ${items.length} 則報導...`);
+        // 🔥 過濾階段：再次檢查標題是否相關
+        const originalCount = items.length;
+        items = items.filter(item => {
+            // 檢查標題是否包含任一驗證關鍵字
+            const isRelevant = VALIDATION_KEYWORDS.some(k => item.title.includes(k));
+            if (!isRelevant) {
+                // 如果您想看被過濾掉什麼，可以把下面這行註解打開
+                // console.log(`   🗑️ 剔除無關新聞：${item.title}`);
+            }
+            return isRelevant;
+        });
+
+        console.log(`   👀 原始抓到 ${originalCount} 筆，經嚴格過濾後剩 ${items.length} 筆有效新聞`);
 
         // 寫入資料庫
         for (const item of items) {
@@ -62,12 +84,12 @@ async function crawlNewsFinal() {
                 
                 if (existing.length === 0) {
                     await db.insert(cases).values({
-                        maskedName: item.source || '網路新聞', // 在列表顯示媒體名稱 (如：Yahoo新聞)
-                        name: item.title,                      // 通用名稱存標題 (如：藝人黃子佼...)
-                        originalName: item.title,              // 原始名稱存標題 (供模糊搜尋用)
+                        maskedName: item.source || '網路新聞',
+                        name: item.title,
+                        originalName: item.title,
                         role: '媒體報導',
                         riskTags: JSON.stringify(['新聞', keyword]),
-                        location: '網路',                      // 設為「網路」以配合我們新寫的搜尋邏輯
+                        location: '網路',
                         caseDate: new Date().toISOString(),
                         description: `[${item.source}] ${item.title}`,
                         sourceType: 'news',
@@ -81,7 +103,7 @@ async function crawlNewsFinal() {
                     process.stdout.write(".");
                 }
             } catch (e) {
-                // 忽略重複鍵值錯誤
+                // 忽略重複鍵值
             }
         }
     }
@@ -89,7 +111,7 @@ async function crawlNewsFinal() {
     // 紀錄 Log
     if (totalNewCount >= 0) {
         await db.insert(dataSyncLogs).values({
-            sourceName: 'News Crawler (Dual Engine)',
+            sourceName: 'News Crawler (Strict Mode)',
             status: 'success',
             recordCount: totalNewCount,
             startedAt: new Date(),
@@ -97,47 +119,38 @@ async function crawlNewsFinal() {
         });
     }
 
-    console.log(`\n🎉 任務全部完成！共新增 ${totalNewCount} 筆資料。`);
+    console.log(`\n🎉 任務完成！共新增 ${totalNewCount} 筆有效資料。`);
 
   } catch (error: any) {
     console.error("❌ 嚴重錯誤:", error.message);
   } finally {
     await browser.close();
-    // 只有在直接執行時才退出，避免影響被呼叫的情況
+    // ⚠️ 這裡保持不自動退出，除非是獨立執行
     if (import.meta.url === `file://${process.argv[1]}`) {
         process.exit(0);
     }
   }
 }
 
-// === Yahoo 抓取邏輯 (廣域連結版) ===
+// === Yahoo 抓取邏輯 ===
 async function scrapeYahoo(page: any, keyword: string) {
     try {
         const url = `https://tw.news.yahoo.com/search?p=${encodeURIComponent(keyword)}`;
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-        // 自動捲動 (Yahoo 是無限捲動，必須捲才會有資料)
         await autoScroll(page);
 
-        // 抓取所有連結，然後用正則表達式過濾
-        // Yahoo 新聞網址特徵：結尾是 .html 且網域包含 yahoo
         return await page.evaluate(() => {
             const results: any[] = [];
-            const links = document.querySelectorAll('a'); // 抓全頁所有連結
+            const links = document.querySelectorAll('a');
             
             links.forEach((a: HTMLAnchorElement) => {
                 const title = a.innerText.trim();
                 const href = a.href;
                 
-                // 濾網：
-                // 1. 標題長度 > 10 (過濾掉 "首頁"、"登入" 等短連結)
-                // 2. 網址包含 .html (Yahoo 新聞內頁特徵)
-                // 3. 排除廣告 (googlead, doubleclick)
+                // 初步濾網
                 if (title.length > 10 && href.includes('.html') && !href.includes('googlead')) {
-                    // 嘗試找來源 (通常在附近的 .Source class)
                     let source = 'Yahoo 新聞';
                     try {
-                        // 往上找兩層看有沒有來源標籤
                         const parent = a.parentElement?.parentElement;
                         if(parent) {
                             const s = parent.querySelector('.Source, .publisher');
@@ -145,7 +158,6 @@ async function scrapeYahoo(page: any, keyword: string) {
                         }
                     } catch(e){}
 
-                    // 避免重複
                     if (!results.find(r => r.link === href)) {
                         results.push({ title, link: href, source });
                     }
@@ -159,18 +171,15 @@ async function scrapeYahoo(page: any, keyword: string) {
     }
 }
 
-// === Google 抓取邏輯 (備援) ===
+// === Google 抓取邏輯 ===
 async function scrapeGoogle(page: any, keyword: string) {
     try {
-        // tbm=nws (新聞模式), tbs=qdr:y5 (過去5年), gl=tw (台灣)
         const url = `https://www.google.com/search?q=${encodeURIComponent(keyword)}&tbm=nws&tbs=qdr:y5&gl=tw`;
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        
-        await new Promise(r => setTimeout(r, 1500)); // 等一下
+        await new Promise(r => setTimeout(r, 1500));
 
         return await page.evaluate(() => {
             const results: any[] = [];
-            // Google 新聞卡片容器
             const elements = document.querySelectorAll('div.SoaBEf, [data-hveid] div[role="heading"]');
             
             elements.forEach(el => {
@@ -196,13 +205,11 @@ async function scrapeGoogle(page: any, keyword: string) {
     }
 }
 
-// 捲動輔助函式
 async function autoScroll(page: any) {
     await page.evaluate(async () => {
         await new Promise<void>((resolve) => {
             let totalHeight = 0;
             let distance = 200;
-            // 捲動 10 次就好，不用太多，大概能抓 20-30 筆
             let count = 0;
             let timer = setInterval(() => {
                 window.scrollBy(0, distance);
@@ -215,10 +222,12 @@ async function autoScroll(page: any) {
             }, 100);
         });
     });
-    await new Promise(r => setTimeout(r, 1000)); // 捲完再等一下
+    await new Promise(r => setTimeout(r, 1000));
 }
 
-// 匯出函數供外部呼叫
 export { crawlNewsFinal };
 
-
+// 🔥 修正：把這段「點火開關」加回來，這樣您在電腦上打指令才會跑！
+if (import.meta.url === `file://${process.argv[1]}`) {
+    crawlNewsFinal();
+}

@@ -6,32 +6,45 @@ async function runAll() {
   const start = Date.now();
 
   try {
-    // 1. 跑新聞
+    // 1. 跑新聞 (媒體)
     console.log("\n--------------------------------");
     console.log("📰 任務一：更新新聞資料 (News)...");
     console.log("--------------------------------");
-    // stdio: 'inherit' 讓子程式的輸出直接顯示在目前的終端機
-    execSync('npx tsx src/server/scripts/crawlNews_Final.ts', { stdio: 'inherit' });
+    try {
+        execSync('npx tsx src/server/scripts/crawlNews_Final.ts', { stdio: 'inherit' });
+    } catch (e) { console.log("⚠️ 新聞爬蟲部分失敗，繼續執行..."); }
 
-    // 2. 跑 CRC (兒少裁罰)
+    // 2. 跑 CRC (衛福部兒少裁罰)
     console.log("\n--------------------------------");
-    console.log("🚜 任務二：更新兒少裁罰資料 (CRC)...");
+    console.log("🛡️ 任務二：更新兒少裁罰資料 (CRC)...");
     console.log("--------------------------------");
-    execSync('npx tsx src/server/scripts/crawlCRC_Real.ts', { stdio: 'inherit' });
+    try {
+        execSync('npx tsx src/server/scripts/crawlCRC_Real.ts', { stdio: 'inherit' });
+    } catch (e) { console.log("⚠️ CRC 爬蟲部分失敗，繼續執行..."); }
 
-    // 3. 跑 幼兒園
+    // 3. 跑 ECE (教育部教保網 - 上帝之手版) 🔥 更新這裡！
     console.log("\n--------------------------------");
-    console.log("🏫 任務三：更新幼兒園名單 (Kindergarten)...");
+    console.log("🏫 任務三：更新教育部違規幼兒園 (ECE)...");
     console.log("--------------------------------");
-    execSync('npx tsx src/server/scripts/crawlKindergarten_Real.ts', { stdio: 'inherit' });
+    // 改用我們剛剛成功的 Popup 版本
+    execSync('npx tsx src/server/scripts/crawlECE_Popup.ts', { stdio: 'inherit' });
+
+    // 4. 跑 司法院 (判決書)
+    console.log("\n--------------------------------");
+    console.log("⚖️ 任務四：更新司法院判決書 (Judicial)...");
+    console.log("--------------------------------");
+    try {
+        execSync('npx tsx src/server/scripts/crawlJudicial_Real.ts', { stdio: 'inherit' });
+    } catch (e) {
+        console.log("⚠️ 判決書爬蟲執行失敗或檔案不存在，跳過此步驟。");
+    }
 
     const duration = (Date.now() - start) / 1000;
     console.log(`\n✅ [全部完成] 所有資料庫更新完畢！耗時：${duration.toFixed(1)} 秒`);
-    console.log("👉 請重新整理網頁，現在應該要有滿滿的資料了！");
+    console.log("👉 請執行 git push 將資料同步至雲端！");
 
   } catch (error) {
-    console.error("\n❌ [流程中斷] 某個爬蟲發生錯誤，請檢查上方紅字訊息。");
-    // 不用 exit，讓它顯示錯誤
+    console.error("\n❌ [流程中斷] 嚴重錯誤，請檢查上方訊息。");
   }
 }
 
