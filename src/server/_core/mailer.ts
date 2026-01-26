@@ -1,16 +1,8 @@
-import nodemailer from 'nodemailer';
+// src/server/_core/mailer.ts
+import { Resend } from 'resend';
 
-// 🔥 回歸最單純的設定
-// 因為我們已經修復了密碼空格問題，讓 Nodemailer 自動處理 Gmail 的複雜連線機制是最穩的
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.GMAIL_USER, 
-        pass: process.env.GMAIL_PASS, 
-    },
-    // 加上這行：強制使用 IPv4 (有些雲端環境 IPv6 會爛掉)
-    family: 4, 
-});
+// 初始化 Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendNotificationEmail(report: {
     suspectName: string;
@@ -18,10 +10,12 @@ export async function sendNotificationEmail(report: {
     description: string;
     reporterIp: string;
 }) {
+    // ⚠️ 注意：Resend 免費版規定「只能寄給您註冊帳號時用的那個信箱」
+    // 如果您註冊是用 crazy555059，那另一個信箱可能會收不到，這是正常的
     const recipients = ['crazy555059@gmail.com', 'a09552871010731@gmail.com'];
+
     const subject = `🚨 [兒少通報] 發現可疑人士：${report.suspectName}`;
     
-    // HTML 內容
     const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
         <div style="background-color: #F59E0B; padding: 16px; text-align: center;">
@@ -37,19 +31,24 @@ export async function sendNotificationEmail(report: {
     `;
 
     try {
-        console.log(`📧 [系統] 嘗試使用 service: 'gmail' 寄信給: ${recipients.join(', ')}`);
+        console.log(`📧 [系統] 嘗試透過 Resend API 寄信...`);
         
-        const info = await transporter.sendMail({
-            from: `"兒少守護小蜂" <${process.env.GMAIL_USER}>`, 
-            to: recipients.join(', '), 
+        const data = await resend.emails.send({
+            from: '兒少守護小蜂 <onboarding@resend.dev>', // 測試專用官方帳號，別改它
+            to: recipients,
             subject: subject,
-            html: htmlContent, 
+            html: htmlContent,
         });
 
-        console.log('✅ Email 寄送成功！Message ID:', info.messageId);
+        if (data.error) {
+            console.error('❌ Resend 回傳錯誤:', data.error);
+            return false;
+        }
+
+        console.log('✅ Email 寄送成功！ID:', data.data?.id);
         return true;
     } catch (error: any) {
-        console.error('❌ Email 寄送失敗:', error.message);
+        console.error('❌ 寄信發生未預期錯誤:', error.message);
         return false;
     }
 }
