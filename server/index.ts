@@ -1,17 +1,10 @@
 // server/index.ts
-
-// ✅ 修正 1: routers 在同層，改用 ./
 import { appRouter } from './routers'; 
-
-// ✅ 修正 2: context 在 _core 資料夾內，改用 ./_core/context
 import { createContext } from './_core/context'; 
-
 import cors from 'cors';
 import express from 'express';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { createServer as createViteServer } from 'vite'; 
-
-// ✅ 修正 3: cron 在 _core 資料夾內，改用 ./_core/cron
 import { startCronJobs } from './_core/cron'; 
 
 async function startServer() {
@@ -29,9 +22,8 @@ async function startServer() {
     })
   );
 
-  // 手動 Search API (給 Home.tsx 用)
+  // 手動 Search API
   app.get('/api/search', async (req, res) => {
-    // 建立臨時 Caller
     // @ts-ignore
     const caller = appRouter.createCaller(await createContext({ req, res }));
     try {
@@ -52,9 +44,12 @@ async function startServer() {
   app.use(vite.middlewares);
 
   // === 啟動 ===
-  const port = process.env.PORT || 3000;
-  app.listen(port, () => {
-    console.log(`🚀 Server running on http://localhost:${port}`);
+  // Render 會自動分配 PORT，我們必須使用它
+  const port = Number(process.env.PORT) || 3000;
+  
+  // 🔥 關鍵修正：強制監聽 '0.0.0.0'，讓 Render 找得到我們
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Server running on http://0.0.0.0:${port}`);
     
     // 啟動排程
     try {
