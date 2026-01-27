@@ -1,26 +1,36 @@
 // src/server/db.ts
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg'; // 🔥 改用解構匯入，比較穩定
-import * as schema from './schema'; // 🔥 匯入所有 schema
+import pg from 'pg'; // 建議使用 default import 避免部分環境相容性問題
+import * as schema from './schema'; 
 import { cases, searchLogs, reports, users, dataSyncLogs } from './schema'; 
 import { sql, eq, desc, like, or, and } from 'drizzle-orm';
 import 'dotenv/config'; 
 
-// 檢查是否有設定資料庫連線字串
-if (!process.env.DATABASE_URL) {
+const connectionString = process.env.DATABASE_URL;
+
+// 1. 檢查是否有設定資料庫連線字串
+if (!connectionString) {
     console.warn("⚠️ 警告：未偵測到 DATABASE_URL 環境變數，Render 上線時請務必設定！");
 }
 
-// 建立連線池 (Connection Pool)
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    // 🔥 關鍵：Neon 在雲端環境 (Render) 必須強制開啟 SSL
-    ssl: true, 
+// 2. 建立連線池 (Connection Pool)
+const pool = new pg.Pool({
+    connectionString: connectionString,
+    // 🔥 關鍵修正：Render 連 Neon 必須這樣設定 SSL，否則會發生 Handshake 錯誤或連線被拒
+    ssl: {
+        rejectUnauthorized: false, // 允許連線 (忽略嚴格的憑證鍊檢查)
+    },
     max: 20, // 連線池上限
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
 });
 
-// 初始化 Drizzle
-// 🔥 關鍵修正：把 schema 傳進去，這樣 db.query 語法才能用
+// 監聽連線錯誤 (避免連線斷掉時讓整個 Server 當機)
+pool.on('error', (err) => {
+    console.error('❌ 資料庫連線池發生意外錯誤:', err);
+});
+
+// 3. 初始化 Drizzle
 export const db = drizzle(pool, { schema });
 
 // ==========================================
@@ -82,7 +92,7 @@ export async function getUserByOpenId(openId: string) {
     } catch (e) { return null; }
 }
 
-// 🔍 搜尋相關 (雖然 routers.ts 已經重寫了，保留這些以免舊 API 壞掉)
+// 🔍 搜尋相關 (保留以免影響舊 API)
 export async function searchCases({ name, area, district, violationType, limit, offset }: any) {
     const conditions = [];
 
