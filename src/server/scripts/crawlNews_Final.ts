@@ -5,59 +5,19 @@ import { db } from '../db';
 import { cases, dataSyncLogs } from '../schema';
 import { eq } from 'drizzle-orm';
 
-// 1. 搜尋用的廣泛關鍵字 (天羅地網版)
+// 🔍 除錯用：確認檔案真的被載入了
+console.log("📂 [系統] 正在讀取並執行 crawlNews_Final.ts ...");
+
+// 1. 搜尋用的廣泛關鍵字
 const SEARCH_KEYWORDS = [
-    // --- 🔴 第一層：核心紅線 (性犯罪/數位暴力) ---
-    '兒少性剝削', 
-    '持有兒少性影像', 
-    '拍攝未成年', 
-    '誘拐未成年',
-    '妨害性自主', 
-    '性侵', 
-    '猥褻', 
-    '性騷擾', 
-    '數位性暴力', 
-    '創意私房', 
-    
-    // --- 🟠 第二層：不當對待 ---
-    '虐童', 
-    '不當管教', 
-    '體罰', 
-    '霸凌', 
-    '施暴', 
-    '餵藥', 
-    '呼巴掌', 
-    '言語羞辱', 
-    '強迫餵食',
-    '幼兒園 違規', 
-    '托嬰中心 違規',
-    
-    // --- 🟡 第三層：行政處分 ---
-    '不適任教師', 
-    '解聘', 
-    '停職', 
-    '撤銷執照', 
-    '廢止設立許可',
-    '終身不得聘任', 
-    '列入黑名單', 
-    '裁罰', 
-    '開罰',
-    
-    // --- 🔵 第四層：高風險場域/角色 ---
-    '狼師', 
-    '惡保母', 
-    '無照保母', 
-    '月嫂 虐嬰',
-    '補習班 狼師', 
-    '教練 性侵', 
-    '教練 性騷', 
-    '家教 性侵', 
-    '安置機構 虐待', 
-    '校園 性平事件',
-    
-    // --- ⚫️ 第五層：特定重大案件 ---
-    '黃子佼', 
-    '幼兒園 餵藥案'
+    '兒少性剝削', '持有兒少性影像', '拍攝未成年', '誘拐未成年',
+    '妨害性自主', '性侵', '猥褻', '性騷擾', '數位性暴力', '創意私房',
+    '虐童', '不當管教', '體罰', '霸凌', '施暴', '餵藥', 
+    '幼兒園 違規', '托嬰中心 違規', '不適任教師', '解聘', 
+    '撤銷執照', '廢止設立許可', '終身不得聘任', '列入黑名單', 
+    '裁罰', '開罰', '狼師', '惡保母', '無照保母', 
+    '補習班 狼師', '教練 性侵', '教練 性騷', '家教 性侵', 
+    '安置機構 虐待', '校園 性平事件', '黃子佼', '幼兒園 餵藥案'
 ];
 
 // 2. 嚴格驗證關鍵字
@@ -72,37 +32,17 @@ const VALIDATION_KEYWORDS = [
 ];
 
 async function crawlNewsFinal() {
-    console.log('📰 [雙引擎新聞爬蟲] 啟動！(全方位安全防護網版)...');
+    console.log('📰 [雙引擎新聞爬蟲] 啟動！(Neon 雲端版)...');
 
-    // 啟動參數優化 (針對 Render 環境)
     const browser = await puppeteer.launch({
         headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--single-process',
-            '--no-zygote'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
     let totalNewCount = 0;
 
     try {
         const page = await browser.newPage();
-        
-        // 請求攔截加速
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            const resourceType = req.resourceType();
-            if (['image', 'stylesheet', 'font', 'media', 'other'].includes(resourceType)) {
-                req.abort();
-            } else {
-                req.continue();
-            }
-        });
-
         await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
         for (const keyword of SEARCH_KEYWORDS) {
@@ -118,53 +58,61 @@ async function crawlNewsFinal() {
             // 過濾
             const originalCount = items.length;
             items = items.filter(item => {
-                const isRelevant = VALIDATION_KEYWORDS.some(k => item.title.includes(k));
-                return isRelevant;
+                return VALIDATION_KEYWORDS.some(k => item.title.includes(k));
             });
 
             console.log(`   👀 原始抓到 ${originalCount} 筆，經嚴格驗證後剩 ${items.length} 筆有效新聞`);
 
-            // 寫入 DB
+            // 寫入 DB (Neon 版)
             let savedCount = 0;
             for (const item of items) {
                 try {
-                    const uniqueId = `NEWS_${item.link}`;
-                    const existing = await db.select().from(cases).where(eq(cases.sourceLink, uniqueId));
+                    // ID 產生與截斷
+                    const uniqueId = `NEWS_${item.link}`.substring(0, 255); 
+                    
+                    // 檢查是否存在
+                    const existing = await db.select().from(cases).where(eq(cases.id, uniqueId));
+                    
                     if (existing.length === 0) {
                         await db.insert(cases).values({
+                            id: uniqueId,
                             maskedName: item.source || '網路新聞',
                             name: item.title,
                             originalName: item.title,
-                            role: '媒體報導',
-                            riskTags: JSON.stringify(['媒體報導', keyword]),
                             location: '網路',
-                            caseDate: item.date || new Date().toISOString(),
-                            description: `[${item.source || '新聞'}] ${item.snippet || item.title}`,
-                            sourceType: 'news',
-                            sourceLink: uniqueId,
-                            verified: false,
-                            createdAt: new Date()
+                            riskTags: `媒體報導,${keyword}`,
+                            riskLevel: 'medium',
+                            source: '媒體報導',
+                            summary: `[${item.source || '新聞'}] ${item.snippet || item.title}`,
+                            url: item.link,
+                            caseDate: item.date || new Date().toISOString().split('T')[0],
+                            crawledAt: new Date()
                         });
                         savedCount++;
                         process.stdout.write("➕");
                     } else {
                         process.stdout.write(".");
                     }
-                } catch (e) { }
+                } catch (e: any) { 
+                    // 忽略重複鍵錯誤
+                }
             }
             console.log(""); 
             totalNewCount += savedCount;
+            // 休息一下避免被封鎖
             await new Promise(r => setTimeout(r, 2000));
         }
 
         if (totalNewCount >= 0) {
-            await db.insert(dataSyncLogs).values({
-                sourceName: 'News Crawler (Safety Net)',
-                status: 'success',
-                recordCount: totalNewCount,
-                startedAt: new Date(),
-                completedAt: new Date(),
-            });
+            try {
+                await db.insert(dataSyncLogs).values({
+                    syncType: 'news',
+                    status: 'success',
+                    recordsAdded: totalNewCount,
+                    message: `News Crawler 任務完成`,
+                    createdAt: new Date(),
+                });
+            } catch(e) {}
         }
         console.log(`\n🎉 任務圓滿完成！共新增 ${totalNewCount} 筆全方位防護資料。`);
 
@@ -175,7 +123,7 @@ async function crawlNewsFinal() {
     }
 }
 
-// 輔助函式
+// 輔助函式 (Yahoo)
 async function scrapeYahoo(page: any, keyword: string) {
     const targetUrl = `https://tw.news.yahoo.com/search?p=${encodeURIComponent(keyword)}`;
     try {
@@ -203,6 +151,7 @@ async function scrapeYahoo(page: any, keyword: string) {
     } catch (e: any) { return []; }
 }
 
+// 輔助函式 (Google)
 async function scrapeGoogle(page: any, keyword: string) {
     const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}&tbm=nws`;
     try {
@@ -229,11 +178,17 @@ async function scrapeGoogle(page: any, keyword: string) {
     } catch (e: any) { return []; }
 }
 
-// 🔥🔥 關鍵 Export：排程系統需要這個函式
 export { crawlNewsFinal };
 
-// 🛑 註解掉這裡！防止伺服器啟動時自動執行
-/* if (import.meta.url === `file://${process.argv[1]}`) {
-    crawlNewsFinal();
-}
-*/
+// 🔥🔥🔥 這是強制執行區塊，絕對會跑 🔥🔥🔥
+console.log("🚀 強制啟動 crawlNewsFinal...");
+
+crawlNewsFinal()
+  .then(() => {
+    console.log("✅ 腳本執行完畢");
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error("❌ 腳本發生錯誤:", err);
+    process.exit(1);
+  });
