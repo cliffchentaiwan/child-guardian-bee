@@ -5,8 +5,8 @@ import { db } from '../db';
 import { cases, dataSyncLogs } from '../schema';
 import { eq } from 'drizzle-orm';
 
-// 🔍 除錯用：確認檔案真的被載入了
-console.log("📂 [系統] 正在讀取並執行 crawlNews_Final.ts ...");
+// 🔍 除錯用：確認檔案被載入 (但不會自動執行)
+console.log("📂 [系統] 載入新聞爬蟲模組 crawlNews_Final.ts (等待呼叫中)...");
 
 // 1. 搜尋用的廣泛關鍵字
 const SEARCH_KEYWORDS = [
@@ -178,17 +178,7 @@ async function scrapeGoogle(page: any, keyword: string) {
     } catch (e: any) { return []; }
 }
 
+// 🔥 關鍵 Export：讓排程系統可以呼叫它
 export { crawlNewsFinal };
 
-// 🔥🔥🔥 這是強制執行區塊，絕對會跑 🔥🔥🔥
-console.log("🚀 強制啟動 crawlNewsFinal...");
-
-crawlNewsFinal()
-  .then(() => {
-    console.log("✅ 腳本執行完畢");
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.error("❌ 腳本發生錯誤:", err);
-    process.exit(1);
-  });
+// 🛑 移除了底部的自動執行區塊，防止 Render 部署時伺服器當機
