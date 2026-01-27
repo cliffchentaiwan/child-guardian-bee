@@ -1,36 +1,53 @@
 // src/server/db.ts
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
-// 🔥 這裡現在可以正確匯入 users 了
+// 🔥 移除 SQLite 相關引用
+// import { drizzle } from 'drizzle-orm/better-sqlite3';
+// import Database from 'better-sqlite3';
+
+// ✅ 改用 Postgres (pg)
+import { drizzle } from 'drizzle-orm/node-postgres';
+import pg from 'pg';
 import { cases, searchLogs, reports, users, dataSyncLogs } from './schema'; 
 import { sql, eq, desc, like, or, and } from 'drizzle-orm';
+import 'dotenv/config'; // 確保能讀取環境變數
 
-// 初始化資料庫
-const sqlite = new Database('sqlite.db');
-export const db = drizzle(sqlite);
+// 檢查是否有設定資料庫連線字串
+if (!process.env.DATABASE_URL) {
+    throw new Error('❌ 錯誤: 找不到 DATABASE_URL 環境變數！請在 Render 或 .env 設定。');
+}
+
+// 建立連線池 (Connection Pool) - 這是連線雲端資料庫的標準做法
+const pool = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: true, // Neon 需要 SSL 連線
+});
+
+// 初始化 Drizzle
+export const db = drizzle(pool);
 
 // ==========================================
-// 🔥 [關鍵修復] Auth 相關函式 (補齊所有缺失)
+// ⬇️ 以下邏輯完全不用動！Drizzle 會自動幫我們轉換語法 ⬇️
 // ==========================================
 
-// 1. 新增或更新使用者 (Google Login 用)
+// 1. 新增或更新使用者
 export async function upsertUser(userData: { email: string; name?: string; picture?: string; googleId?: string }) {
     try {
-        const existingUser = await db.select().from(users).where(eq(users.email, userData.email)).get();
+        // .get() 在 Postgres 模式下通常要改用 .limit(1) 後取陣列第一項，
+        // 但 drizzle-orm 新版有支援類似寫法。為了保險，我們用標準陣列解構寫法：
+        const [existingUser] = await db.select().from(users).where(eq(users.email, userData.email)).limit(1);
         
         if (existingUser) {
-            return await db.update(users)
+            const [updated] = await db.update(users)
                 .set({
                     name: userData.name,
                     picture: userData.picture,
-                    googleId: userData.googleId, // 更新 Google ID
+                    googleId: userData.googleId,
                     updatedAt: new Date()
                 })
                 .where(eq(users.email, userData.email))
-                .returning()
-                .get();
+                .returning();
+            return updated;
         } else {
-            return await db.insert(users)
+            const [newUser] = await db.insert(users)
                 .values({
                     email: userData.email,
                     name: userData.name || 'User',
@@ -40,8 +57,8 @@ export async function upsertUser(userData: { email: string; name?: string; pictu
                     createdAt: new Date(),
                     updatedAt: new Date()
                 })
-                .returning()
-                .get();
+                .returning();
+            return newUser;
         }
     } catch (e) {
         console.error("❌ upsertUser 失敗:", e);
@@ -52,29 +69,24 @@ export async function upsertUser(userData: { email: string; name?: string; pictu
 // 2. 透過 Email 找人
 export async function getUserByEmail(email: string) {
     try {
-        return await db.select().from(users).where(eq(users.email, email)).get();
+        const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+        return user;
     } catch (e) { return null; }
 }
 
-// 3. 🔥 [修復警告] 透過 OpenID (Google ID) 找人
-// SDK 會呼叫這個函式，如果沒有就會報錯
+// 3. 透過 OpenID 找人
 export async function getUserByOpenId(openId: string) {
     try {
-        // 這裡假設 openId 就是 googleId，或者是 email (視您的 Auth 實作而定)
-        // 為了保險，我們先用 googleId 找，找不到再嘗試用 email 找 (如果 openId 格式像 email)
-        let user = await db.select().from(users).where(eq(users.googleId, openId)).get();
+        let [user] = await db.select().from(users).where(eq(users.googleId, openId)).limit(1);
         
         if (!user && openId.includes('@')) {
-             user = await db.select().from(users).where(eq(users.email, openId)).get();
+             [user] = await db.select().from(users).where(eq(users.email, openId)).limit(1);
         }
         return user;
     } catch (e) { return null; }
 }
 
-// ==========================================
 // 🔍 搜尋相關函式
-// ==========================================
-
 export async function searchCases({ name, area, district, violationType, limit, offset }: any) {
     const conditions = [];
 
@@ -125,12 +137,12 @@ export async function getSearchStats() {
 
 export async function getCaseCount() {
     try {
+        // Postgres 的 count 回傳型別可能會是 string，轉一下比較安全
         const res = await db.select({ count: sql<number>`count(*)` }).from(cases);
-        return res[0].count;
+        return Number(res[0].count);
     } catch(e) { return 0; }
 }
 
-// 其他佔位函式
 export async function getAllCases() { return []; }
 export async function getCaseCountByLocation() { return []; }
 export async function insertReport(data: any) { 

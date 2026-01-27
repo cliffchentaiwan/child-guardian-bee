@@ -1,12 +1,12 @@
 // drizzle.config.ts
-import { defineConfig } from "drizzle-kit";
+import { defineConfig } from 'drizzle-kit';
+import 'dotenv/config'; // 讀取 .env 檔案
 
 export default defineConfig({
-  // 🔥 修正：根據你的截圖，schema 在 server 資料夾下
-  schema: "./src/server/schema.ts", 
-  out: "./drizzle", // 輸出資料夾改到根目錄比較單純
-  dialect: "sqlite",
+  out: './drizzle',
+  schema: './src/server/schema.ts',
+  dialect: 'postgresql', // 🔥 關鍵修改：從 'sqlite' 改成 'postgresql'
   dbCredentials: {
-    url: "sqlite.db",
+    url: process.env.DATABASE_URL!,
   },
 });
