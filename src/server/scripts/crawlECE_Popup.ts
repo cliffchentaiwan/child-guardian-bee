@@ -4,19 +4,21 @@ import puppeteer from 'puppeteer';
 import { db } from '../db';
 import { cases, dataSyncLogs } from '../schema';
 import { eq } from 'drizzle-orm';
+import { invokeLLM } from '../../../server/_core/llm';
+import { fileURLToPath } from 'url';
 
 async function crawlECE_Popup() {
-  console.log("🏫 [教育部教保網] 啟動 (上帝之手翻頁版)...");
-  console.log("⚠️ 視窗會跳出，請觀察程式是否會自動「翻頁」！");
-
+  console.log("🏫 [教育部教保網] 啟動 (AI + 日誌修正版)...");
+  
   const browser = await puppeteer.launch({
-    headless: false, // 必須開啟視窗
+    headless: false,
     slowMo: 50,
     defaultViewport: null,
     args: ['--start-maximized', '--no-sandbox', '--disable-setuid-sandbox']
   });
 
   let totalNewCount = 0;
+  const startTime = new Date();
 
   try {
     const page = await browser.newPage();
@@ -25,7 +27,6 @@ async function crawlECE_Popup() {
     console.log("📄 前往裁罰查詢頁面...");
     await page.goto('https://ap.ece.moe.edu.tw/webecems/punishSearch.aspx', { waitUntil: 'domcontentloaded' });
 
-    // 1. 點擊搜尋
     console.log("🤖 點擊搜尋...");
     const searchBtnSelector = '#ContentPlaceHolder1_btnSearch, input[value="搜尋"]';
     await page.waitForSelector(searchBtnSelector);
@@ -42,46 +43,37 @@ async function crawlECE_Popup() {
     let hasNextPage = true;
     let pageNum = 1;
 
-    // --- 主迴圈 ---
     while (hasNextPage) {
-        // 抓取本頁資料按鈕
         const viewButtonsIds = await page.evaluate(() => {
             const btns = Array.from(document.querySelectorAll('a.btn-primary'));
-            return btns
-                .filter(b => b.innerText.trim() === '檢視')
-                .map(b => b.id); 
+            return btns.filter(b => b.innerText.trim() === '檢視').map(b => b.id); 
         });
 
         console.log(`\n📄 [第 ${pageNum} 頁] 共有 ${viewButtonsIds.length} 間學校...`);
+        if (viewButtonsIds.length > 0) process.stdout.write("      ");
 
-        // --- 子迴圈：抓取單頁資料 ---
         for (let i = 0; i < viewButtonsIds.length; i++) {
             const btnId = viewButtonsIds[i];
             
             try {
                 const newTargetPromise = new Promise<any>(resolve => browser.once('targetcreated', resolve));
-                
-                // 這裡也用上帝之手點檢視，比較穩
-                await page.evaluate((id) => {
-                    const btn = document.getElementById(id);
-                    if(btn) btn.click();
-                }, btnId);
-
+                await page.evaluate((id) => { document.getElementById(id)?.click(); }, btnId);
                 const newTarget = await newTargetPromise;
                 const newPage = await newTarget.page();
 
-                if (!newPage) continue;
-                await newPage.bringToFront(); 
+                if (!newPage) {
+                    process.stdout.write("❓");
+                    continue;
+                }
                 
-                try { await newPage.waitForNetworkIdle({ timeout: 3000 }); } catch(e) {}
+                await newPage.bringToFront(); 
                 try { await newPage.waitForSelector('table', { timeout: 5000 }); } catch(e) {}
                 
                 const penalties = await newPage.evaluate(() => {
                     const results: any[] = [];
                     const titleText = document.querySelector('h3, span#lblTitle, .title')?.textContent || '';
                     const nameFromTitle = titleText.replace('裁罰結果', '').trim();
-                    const rows = document.querySelectorAll('table tr');
-                    rows.forEach(row => {
+                    document.querySelectorAll('table tr').forEach(row => {
                         const cells = Array.from(row.querySelectorAll('td'));
                         if (cells.length >= 6) {
                             const txtDate = cells[0]?.innerText?.trim();
@@ -96,8 +88,9 @@ async function crawlECE_Popup() {
                     return results;
                 });
 
-                if (penalties.length > 0) process.stdout.write("➕"); 
-                else process.stdout.write(".");
+                if (penalties.length === 0) {
+                   process.stdout.write("▫️");
+                }
 
                 for (const item of penalties) {
                     try {
@@ -107,46 +100,65 @@ async function crawlECE_Popup() {
                         if (year < 1911) year += 1911;
                         const finalDate = `${year}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
                         const uniqueId = `ECE_${item.name}_${finalDate}`;
+                        
                         const existing = await db.select().from(cases).where(eq(cases.id, uniqueId));
                         
                         if (existing.length === 0) {
+                            const description = `[${item.reason}] ${item.content}`;
+                            let summary = description;
+
+                            try {
+                                process.stdout.write("🧠");
+                                const aiResult = await invokeLLM({
+                                    messages: [
+                                        { role: 'system', content: '你是一位專業的兒少安全法務專家。請根據使用者提供的幼兒園裁罰內容，用台灣繁體中文，以客觀、簡潔、嚴厲的語氣，濃縮成一句話的摘要，指出最關鍵的違規事實。不超過50個字。' },
+                                        { role: 'user', content: `幼兒園名稱: ${item.name}, 裁罰內容: ${description}` }
+                                    ]
+                                });
+                                const aiSummary = aiResult.choices[0].message.content;
+                                if (typeof aiSummary === 'string' && aiSummary.length > 1) {
+                                    summary = aiSummary.trim();
+                                }
+                            } catch (aiError: any) {
+                                console.error(`\n⚠️ AI 分析失敗 (${item.name})，將使用原始描述。錯誤: ${aiError.message}`);
+                            }
+
                             await db.insert(cases).values({
+                                id: uniqueId,
                                 maskedName: item.name,
                                 name: item.name,
                                 originalName: item.name,
                                 role: '幼兒園',
-                                riskTags: JSON.stringify(['教育部裁罰']),
+                                riskTags: '教育部裁罰',
                                 location: '全台', 
                                 caseDate: finalDate,
-                                description: `[${item.reason}] ${item.content}`,
+                                description: description,
+                                summary: summary,
                                 source: '教保網',
-                                id: uniqueId,
                                 verified: true,
-                                createdAt: new Date(),
                             });
                             totalNewCount++;
+                            process.stdout.write("➕");
+                        } else {
+                            process.stdout.write(".");
                         }
-                    } catch (e) {}
+                    } catch (dbError: any) {
+                        console.error(`\n❌ 處理紀錄 ${item.name} 時DB發生錯誤:`, dbError.message);
+                    }
                 }
                 await newPage.close();
-            } catch (err: any) {
+            } catch (pageError: any) {
+                console.error(`\n❌ 處理彈出視窗時發生錯誤:`, pageError.message);
                 const pages = await browser.pages();
                 if (pages.length > 2) await pages[pages.length - 1].close().catch(() => {});
             }
-            await new Promise(r => setTimeout(r, 100));
         }
+        console.log(""); 
 
-        // --- 🔥 上帝之手翻頁區 (God Mode) ---
-        console.log(`\n   🔄 第 ${pageNum} 頁完成，準備執行強制翻頁...`);
-        
-        // 直接使用 ID 執行 click()，無視遮罩與滑鼠位置
+        console.log(`   🔄 第 ${pageNum} 頁完成，準備翻頁...`);
         const nextSuccess = await page.evaluate(() => {
             const nextBtn = document.getElementById('PageControl1_lbNextPage');
-            if (nextBtn) {
-                // 檢查是否被禁用 (class="aspNetDisabled")
-                if (nextBtn.classList.contains('aspNetDisabled')) return false;
-                
-                // 強制點擊！
+            if (nextBtn && !nextBtn.classList.contains('aspNetDisabled')) {
                 nextBtn.click();
                 return true;
             }
@@ -154,50 +166,43 @@ async function crawlECE_Popup() {
         });
 
         if (nextSuccess) {
-            console.log("      ⚡️ 已觸發下一頁點擊 (DOM Click)，等待載入...");
-            
-            // 等待 PostBack 完成 (因為 URL 不會變，只能硬等 + 檢查 DOM)
-            await new Promise(r => setTimeout(r, 5000)); 
-            
-            // 嘗試等待檢視按鈕刷新 (舊的按鈕失效，新的出現)
+            console.log("      ⚡️ 已觸發下一頁，等待載入...");
+            await new Promise(r => setTimeout(r, 5000));
             try { 
-                await page.waitForFunction(() => {
-                     // 簡單檢查：只要頁面上還有檢視按鈕就好
-                     // 更嚴謹的話可以檢查 ID 變化，但這裡先求有
-                     return document.querySelectorAll('a.btn-primary').length > 0;
-                }, { timeout: 10000 });
+                await page.waitForFunction(() => document.querySelectorAll('a.btn-primary').length > 0, { timeout: 10000 });
             } catch(e){}
-            
             pageNum++;
         } else {
-            console.log("   🏁 找不到下一頁按鈕或按鈕已停用，任務全部完成！");
+            console.log("   🏁 找不到下一頁按鈕或已達最後一頁，任務完成！");
             hasNextPage = false;
         }
     }
 
-    if (totalNewCount >= 0) {
-        await db.insert(dataSyncLogs).values({
-            sourceName: 'gov_ece',
-            status: 'success',
-            recordCount: totalNewCount,
-            startedAt: new Date(),
-            completedAt: new Date(),
-        });
-    }
-
+    await db.insert(dataSyncLogs).values({
+        syncType: 'ece',
+        status: 'success',
+        recordsAdded: totalNewCount,
+        createdAt: startTime,
+    });
     console.log(`\n🎉 任務圓滿結束！共新增 ${totalNewCount} 筆詳細紀錄。`);
 
   } catch (error: any) {
     console.error("❌ 嚴重錯誤:", error.message);
+    await db.insert(dataSyncLogs).values({
+        syncType: 'ece',
+        status: 'failed',
+        message: error.message,
+        createdAt: startTime,
+    });
   } finally {
     console.log("⏳ 瀏覽器將關閉...");
     await browser.close();
-    if (import.meta.url === `file://${process.argv[1]}`) {
+    if (process.argv[1] === fileURLToPath(import.meta.url)) {
         process.exit(0);
     }
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
     crawlECE_Popup();
 }

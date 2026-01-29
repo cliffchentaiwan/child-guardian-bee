@@ -167,7 +167,14 @@ export const appRouter = router({
             ? like(cases.location, `%${area}%`) 
             : undefined;
 
-        const whereClause = and(isNotNull(cases.riskTags), areaCondition, nameCondition);
+        const childSafetyKeywords = ['兒', '童', '幼', '學生', '教保', '校', '師', '教練', '學童', '學員', '嬰'];
+        const childSafetyCondition = or(
+            ...childSafetyKeywords.map(keyword => like(cases.description || '', `%${keyword}%`)),
+            ...childSafetyKeywords.map(keyword => like(cases.name || '', `%${keyword}%`)),
+            ...childSafetyKeywords.map(keyword => like(cases.riskTags || '', `%${keyword}%`))
+        );
+
+        const whereClause = and(childSafetyCondition, areaCondition, nameCondition);
 
         try {
             const results = await db.select()
@@ -258,8 +265,12 @@ export const appRouter = router({
   database: router({
     lastUpdate: publicProcedure.query(async () => {
       try {
-        const logs = await db.select().from(dataSyncLogs).where(eq(dataSyncLogs.status, 'success')).orderBy(desc(dataSyncLogs.completedAt)).limit(1);
-        return { lastUpdateTime: logs[0]?.completedAt, totalCases: 0 };
+        const logs = await db
+          .select()
+          .from(dataSyncLogs)
+          .orderBy(desc(dataSyncLogs.createdAt)) // 使用 createdAt 排序
+          .limit(1);
+        return { lastUpdateTime: logs[0]?.createdAt, totalCases: 0 }; // 回傳 createdAt
       } catch (e) { return { lastUpdateTime: null, totalCases: 0 }; }
     }),
   }),

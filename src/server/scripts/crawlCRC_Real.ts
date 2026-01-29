@@ -4,6 +4,7 @@ import puppeteer from 'puppeteer';
 import { db } from '../db';
 import { cases, dataSyncLogs } from '../schema';
 import { eq } from 'drizzle-orm';
+import { invokeLLM } from '../../../server/_core/llm';
 import { fileURLToPath } from 'url'; // 確保能正確判斷執行環境
 
 async function crawlCRC() {
@@ -22,6 +23,7 @@ async function crawlCRC() {
   });
 
   let totalNewCount = 0;
+  const startTime = new Date();
 
   try {
     const page = await browser.newPage();
@@ -127,28 +129,47 @@ async function crawlCRC() {
                 const existing = await db.select().from(cases).where(eq(cases.id, uniqueId));
                 
                 if (existing.length === 0) {
+                    const description = `違規內容：${item.reason}`;
+                    let summary = description; // 預設摘要為原始描述
+
+                    try {
+                        process.stdout.write("🧠"); // 顯示 AI 思考圖示
+                        const aiResult = await invokeLLM({
+                            messages: [
+                                { role: 'system', content: '你是一位專業的兒少安全法務專家。請根據使用者提供的裁罰內容，用台灣繁體中文，以客觀、簡潔、嚴厲的語氣，濃縮成一句話的摘要，指出最關鍵的人事時地物和違規事實。不超過50個字。' },
+                                { role: 'user', content: `姓名: ${item.name}, 地點: ${item.location}, 內容: ${item.reason}` }
+                            ]
+                        });
+                        const aiSummary = aiResult.choices[0].message.content;
+                        if (typeof aiSummary === 'string' && aiSummary.length > 1) {
+                            summary = aiSummary.trim();
+                        }
+                    } catch (aiError: any) {
+                        console.error(`\n⚠️ AI 分析失敗 (${item.name})，將使用原始描述。錯誤: ${aiError.message}`);
+                    }
+
                     await db.insert(cases).values({
-                        // 🔥【修正 2】將 uniqueId 寫入 id 欄位 (關鍵修正)
                         id: uniqueId,
                         maskedName: item.name,
                         name: item.name,
                         originalName: item.name,
                         role: '個人/機構',
-                        riskTags: JSON.stringify(['兒少權益法', '裁罰']),
+                        riskTags: '兒少權益法,裁罰', // 改為逗號分隔字串以保持一致
                         location: item.location || '全台',
                         caseDate: finalDate,
-                        description: `違規內容：${item.reason}`,
-                        source: '衛福部裁罰', // 使用中文名稱
-                        // sourceLink: uniqueId, // 可選，如果不重要可省略，重點是有 id
+                        description: description,
+                        summary: summary, // 使用 AI 生成或預設的摘要
+                        source: '衛福部裁罰', 
                         verified: true,
-                        createdAt: new Date(),
                     });
                     newThisPage++;
                     process.stdout.write("➕");
                 } else {
                     process.stdout.write(".");
                 }
-            } catch (e) {}
+            } catch (e: any) {
+                console.error(`\n❌ 處理紀錄 ${item.name} 時發生錯誤:`, e.message);
+            }
         }
         totalNewCount += newThisPage;
         console.log(""); 
@@ -182,20 +203,23 @@ async function crawlCRC() {
         }
     }
 
-    if (totalNewCount >= 0) {
-        await db.insert(dataSyncLogs).values({
-            sourceName: 'gov_crc',
-            status: 'success',
-            recordCount: totalNewCount,
-            startedAt: new Date(),
-            completedAt: new Date(),
-        });
-    }
+    await db.insert(dataSyncLogs).values({
+        syncType: 'crc',
+        status: 'success',
+        recordsAdded: totalNewCount,
+        createdAt: startTime,
+    });
 
     console.log(`\n🎉 CRC 爬取完成！本次新增 ${totalNewCount} 筆資料。`);
 
   } catch (error: any) {
     console.error("❌ CRC 錯誤:", error.message);
+    await db.insert(dataSyncLogs).values({
+        syncType: 'crc',
+        status: 'failed',
+        message: error.message,
+        createdAt: startTime,
+    });
   } finally {
     await browser.close();
     if (process.argv[1] === fileURLToPath(import.meta.url)) {
