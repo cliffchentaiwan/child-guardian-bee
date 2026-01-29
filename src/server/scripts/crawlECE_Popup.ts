@@ -107,7 +107,7 @@ async function crawlECE_Popup() {
                         if (year < 1911) year += 1911;
                         const finalDate = `${year}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
                         const uniqueId = `ECE_${item.name}_${finalDate}`;
-                        const existing = await db.select().from(cases).where(eq(cases.sourceLink, uniqueId));
+                        const existing = await db.select().from(cases).where(eq(cases.id, uniqueId));
                         
                         if (existing.length === 0) {
                             await db.insert(cases).values({
@@ -119,8 +119,8 @@ async function crawlECE_Popup() {
                                 location: '全台', 
                                 caseDate: finalDate,
                                 description: `[${item.reason}] ${item.content}`,
-                                sourceType: 'gov_ece',
-                                sourceLink: uniqueId,
+                                source: '教保網',
+                                id: uniqueId,
                                 verified: true,
                                 createdAt: new Date(),
                             });

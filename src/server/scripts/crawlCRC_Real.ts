@@ -4,12 +4,13 @@ import puppeteer from 'puppeteer';
 import { db } from '../db';
 import { cases, dataSyncLogs } from '../schema';
 import { eq } from 'drizzle-orm';
+import { fileURLToPath } from 'url'; // 確保能正確判斷執行環境
 
 async function crawlCRC() {
-  console.log("🛡️ [CRC 兒少裁罰] 啟動！正在為您收割全台裁罰資料...");
+  console.log("🛡️ [CRC 兒少裁罰] 啟動！正在為您收割全台裁罰資料 (ID 修正版)...");
   
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: true, // 建議背景執行
     defaultViewport: null,
     args: [
         '--start-maximized', 
@@ -83,7 +84,7 @@ async function crawlCRC() {
             if (cities.includes(token)) {
                 currentLocation = token;
                 const nextToken = tokens[i+1];
-                // 🔥 這裡已放寬到 20 字，確保能抓到「私立人愛幼兒園」
+                // 🔥 放寬到 20 字
                 if (nextToken && nextToken.length >= 2 && nextToken.length <= 20 && !cities.includes(nextToken)) {
                     currentName = nextToken;
                     currentReasonBuffer = ''; 
@@ -110,7 +111,6 @@ async function crawlCRC() {
         console.log(`   👀 本頁發現 ${items.length} 筆資料...`);
         if (items.length > 0) process.stdout.write("      ");
 
-        // 🔥🔥🔥 補回漏掉的這一行！ 🔥🔥🔥
         let newThisPage = 0;
 
         for (const item of items) {
@@ -122,10 +122,14 @@ async function crawlCRC() {
                 const finalDate = `${year}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
                 
                 const uniqueId = `CRC_${item.name}_${finalDate}`;
-                const existing = await db.select().from(cases).where(eq(cases.sourceLink, uniqueId));
+                
+                // 🔥【修正 1】改用 cases.id 檢查重複 (關鍵修正)
+                const existing = await db.select().from(cases).where(eq(cases.id, uniqueId));
                 
                 if (existing.length === 0) {
                     await db.insert(cases).values({
+                        // 🔥【修正 2】將 uniqueId 寫入 id 欄位 (關鍵修正)
+                        id: uniqueId,
                         maskedName: item.name,
                         name: item.name,
                         originalName: item.name,
@@ -134,8 +138,8 @@ async function crawlCRC() {
                         location: item.location || '全台',
                         caseDate: finalDate,
                         description: `違規內容：${item.reason}`,
-                        sourceType: 'gov_crc',
-                        sourceLink: uniqueId,
+                        source: '衛福部裁罰', // 使用中文名稱
+                        // sourceLink: uniqueId, // 可選，如果不重要可省略，重點是有 id
                         verified: true,
                         createdAt: new Date(),
                     });
@@ -194,14 +198,15 @@ async function crawlCRC() {
     console.error("❌ CRC 錯誤:", error.message);
   } finally {
     await browser.close();
-    if (import.meta.url === `file://${process.argv[1]}`) {
+    if (process.argv[1] === fileURLToPath(import.meta.url)) {
         process.exit(0);
     }
   }
 }
 
-export { crawlCRC };
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-    crawlCRC().then(() => process.exit(0));
+// 確保可以被 import 也可以直接執行
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+    crawlCRC();
 }
+
+export { crawlCRC };

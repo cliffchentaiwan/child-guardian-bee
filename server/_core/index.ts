@@ -6,8 +6,9 @@ import express from 'express';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { createServer as createViteServer } from 'vite';
 
-// ⏰ 排程設定 (只引入設定函式，不引入爬蟲本身)
-import { startCronJobs } from './cron';
+// 🔥【關鍵修改】引入我們剛剛寫好的「全能型」排程器
+// 路徑說明：從 _core 資料夾往上一層 (..) 進入 scripts 資料夾
+import { startScheduler } from '../scripts/scheduler';
 
 async function startServer() {
   const app = express();
@@ -51,10 +52,10 @@ async function startServer() {
   app.listen(port, () => {
     console.log(`🚀 Server running on port ${port}`);
     
-    // ✅ 正確：只啟動排程計時器 (鬧鐘)，不直接跑爬蟲
+    // ✅ 正確：啟動新的排程系統 (News + CRC + ECE)
     try {
-      startCronJobs();
-      console.log("⏰ 排程系統已就緒 (每日 03:00 執行)");
+      startScheduler();
+      console.log("⏰ 內部排程系統已啟動 (每日 03:00 執行)");
     } catch (err) {
       console.error("❌ 排程啟動失敗:", err);
     }

@@ -3,14 +3,31 @@ import { COOKIE_NAME, getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
+import { promisify } from 'util';
+import { exec } from 'child_process';
 
-// ✅ 路徑修正：因為 routers.ts 和 db.ts 都在 src/server/ 資料夾下，直接用 ./ 即可
+// ✅ 路徑修正
 import { db } from "./db"; 
 import { cases, dataSyncLogs, reports } from "./schema"; 
 // 🔥【路徑修正】正確指向同層級或上層
 import { sendNotificationEmail } from "./_core/mailer"; 
 
 import { desc, eq, isNotNull, like, or, and, sql } from "drizzle-orm";
+
+// 設定異步執行的 exec
+const execAsync = promisify(exec);
+
+// 🕷️ 爬蟲指令清單 (Gemini CLI 建議的四個關鍵檔案)
+const scraperCommands = [
+  // 1. 新聞爬蟲
+  { name: 'News', command: 'npx tsx src/server/scripts/crawlNews_Final.ts' },
+  // 2. CRC 兒少裁罰 (衛福部)
+  { name: 'CRC', command: 'npx tsx src/server/scripts/crawlCRC_Real.ts' },
+  // 3. ECE 教保網 (彈窗破解版)
+  { name: 'ECE', command: 'npx tsx src/server/scripts/crawlECE_Popup.ts' },
+  // 4. 司法院 (需要人工驗證碼，自動跑可能會超時，但手動按按鈕可以試試)
+  { name: 'Judicial', command: 'npx tsx src/server/scripts/crawlJudicial_Real.ts' },
+];
 
 export const appRouter = router({
   system: systemRouter,
@@ -23,6 +40,50 @@ export const appRouter = router({
       return { success: true } as const;
     }),
   }),
+
+  // 🔥 新增：手動同步指令 (manualSyncAll)
+  manualSyncAll: publicProcedure
+    .mutation(async () => {
+      console.log('🤖 [API] 收到請求：開始依序執行所有爬蟲...');
+
+      const executionLogs: { source: string; status: string; output?: string; error?: string }[] = [];
+
+      // 使用 for...of 迴圈確保「一個跑完才跑下一個」，避免塞爆伺服器
+      for (const scraper of scraperCommands) {
+        console.log(`▶️ 正在執行: ${scraper.name}...`);
+        try {
+          // 設定 timeout 為 15 分鐘，避免卡死
+          const { stdout, stderr } = await execAsync(scraper.command, {
+            timeout: 1000 * 60 * 15, 
+          });
+
+          if (stderr) console.error(`[${scraper.name}] 警告/錯誤:`, stderr);
+          console.log(`[${scraper.name}] 完成:`, stdout.slice(0, 200) + '...'); // 只印出前200字避免 log 太長
+
+          executionLogs.push({
+            source: scraper.name,
+            status: 'success',
+            output: '執行成功 (詳見 Server Logs)',
+          });
+
+        } catch (error: any) {
+          console.error(`❌ [${scraper.name}] 執行失敗:`, error.message);
+          // 如果是司法院爬蟲超時，我們也把它記錄下來，但不中斷流程
+          executionLogs.push({
+            source: scraper.name,
+            status: 'failed',
+            error: error.message,
+          });
+        }
+      }
+
+      console.log('✅ 所有爬蟲腳本執行完畢。');
+
+      return {
+        message: '所有爬蟲已依序執行完畢',
+        report: executionLogs,
+      };
+    }),
 
   search: router({
     // 地區列表
@@ -41,8 +102,8 @@ export const appRouter = router({
           .sort();
         return ['全部地區', ...locations];
       } catch (error: any) {
-        console.error("❌ 讀取地區失敗:", error.message); // 讓錯誤印在 Render Log
-        return ['全部地區']; // 降級處理
+        console.error("❌ 讀取地區失敗:", error.message);
+        return ['全部地區'];
       }
     }),
 
@@ -134,7 +195,7 @@ export const appRouter = router({
                 disclaimer
             };
         } catch (error: any) {
-            console.error("❌ 搜尋失敗:", error.message); // 重要：印出錯誤
+            console.error("❌ 搜尋失敗:", error.message);
             return { found: false, hasMore: false, results: [], disclaimer: "系統連線異常，請稍後再試" };
         }
       }),
@@ -178,7 +239,6 @@ export const appRouter = router({
       }),
 
     pending: protectedProcedure.query(async ({ ctx }) => {
-        // 這裡暫時回傳空陣列，需實作 admin 權限邏輯
         return [];
     }),
   }),
@@ -188,13 +248,13 @@ export const appRouter = router({
     lastUpdate: publicProcedure.query(async () => {
       try {
         const logs = await db.select().from(dataSyncLogs).where(eq(dataSyncLogs.status, 'success')).orderBy(desc(dataSyncLogs.completedAt)).limit(1);
-        // const caseCount = await dbModule.getCaseCount(); // 暫時移除，直接查 db
         return { lastUpdateTime: logs[0]?.completedAt, totalCases: 0 };
       } catch (e) { return { lastUpdateTime: null, totalCases: 0 }; }
     }),
   }),
 
   map: router({ cases: publicProcedure.query(async () => { return []; }), stats: publicProcedure.query(async () => { return []; }) }),
+  // 保留舊的 sync.trigger 以防前端有其他地方呼叫，但建議改用 manualSyncAll
   sync: router({ trigger: publicProcedure.mutation(() => ({ success: true })) }),
   judicial: router({ status: publicProcedure.query(() => ({ ok: true })) }),
   news: router({ status: publicProcedure.query(() => ({ ok: true })) }),
