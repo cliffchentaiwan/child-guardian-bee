@@ -8,7 +8,7 @@ import { exec } from 'child_process';
 
 // ✅ 路徑修正
 import { db } from "./db"; 
-import { cases, dataSyncLogs, reports } from "./schema"; 
+import { cases, dataSyncLogs, reports } from "../src/server/schema"; 
 // 🔥【路徑修正】正確指向同層級或上層
 import { sendNotificationEmail } from "./_core/mailer"; 
 
