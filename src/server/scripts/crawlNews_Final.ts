@@ -4,6 +4,7 @@ import puppeteer from 'puppeteer';
 import { db } from '../db';
 import { cases, dataSyncLogs } from '../schema';
 import { eq } from 'drizzle-orm';
+import { invokeLLM } from '../../../server/_core/llm';
 
 // 🔍 除錯用：確認檔案被載入 (但不會自動執行)
 console.log("📂 [系統] 載入新聞爬蟲模組 crawlNews_Final.ts (等待呼叫中)...");
@@ -74,6 +75,23 @@ async function crawlNewsFinal() {
                     const existing = await db.select().from(cases).where(eq(cases.id, uniqueId));
                     
                     if (existing.length === 0) {
+                        let summary = item.title; // 預設摘要為標題
+                        try {
+                            process.stdout.write("🧠");
+                            const aiResult = await invokeLLM({
+                                messages: [
+                                    { role: 'system', content: '你是一位專業的兒少安全法務專家。請根據使用者提供的新聞標題，用台灣繁體中文，以客觀、簡潔、嚴厲的語氣，濃縮成一句話的摘要，指出最關鍵的人事時地物和潛在風險。不超過50個字。' },
+                                    { role: 'user', content: `新聞標題: ${item.title}\n新聞片段: ${item.snippet}` }
+                                ]
+                            });
+                            const aiSummary = aiResult.choices[0].message.content;
+                            if (typeof aiSummary === 'string' && aiSummary.length > 1) {
+                                summary = aiSummary.trim();
+                            }
+                        } catch (aiError: any) {
+                            console.error(`\n⚠️ AI 分析新聞失敗，將使用原始標題。錯誤: ${aiError.message}`);
+                        }
+
                         await db.insert(cases).values({
                             id: uniqueId,
                             maskedName: item.source || '網路新聞',
@@ -83,7 +101,7 @@ async function crawlNewsFinal() {
                             riskTags: `媒體報導,${keyword}`,
                             riskLevel: 'medium',
                             source: '媒體報導',
-                            summary: `[${item.source || '新聞'}] ${item.snippet || item.title}`,
+                            summary: summary,
                             url: item.link,
                             caseDate: item.date || new Date().toISOString().split('T')[0],
                             crawledAt: new Date()
@@ -153,7 +171,7 @@ async function scrapeYahoo(page: any, keyword: string) {
 
 // 輔助函式 (Google)
 async function scrapeGoogle(page: any, keyword: string) {
-    const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}&tbm=nws`;
+    const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}&tbm=nws&cr=countryTW`;
     try {
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
         return await page.evaluate(() => {

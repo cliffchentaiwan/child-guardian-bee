@@ -167,14 +167,28 @@ export const appRouter = router({
             ? like(cases.location, `%${area}%`) 
             : undefined;
 
+        // 🧠 全新搜尋策略：主關聯性篩選器
+        // 條件1: 內容本身與兒少相關 (適用於新聞、司法等)
         const childSafetyKeywords = ['兒', '童', '幼', '學生', '教保', '校', '師', '教練', '學童', '學員', '嬰'];
-        const childSafetyCondition = or(
+        const contentIsRelevantCondition = or(
             ...childSafetyKeywords.map(keyword => like(cases.description || '', `%${keyword}%`)),
-            ...childSafetyKeywords.map(keyword => like(cases.name || '', `%${keyword}%`)),
-            ...childSafetyKeywords.map(keyword => like(cases.riskTags || '', `%${keyword}%`))
+            ...childSafetyKeywords.map(keyword => like(cases.name || '', `%${keyword}%`))
         );
 
-        const whereClause = and(childSafetyCondition, areaCondition, nameCondition);
+        // 條件2: 來源本身就與兒少高度相關 (教保網、衛福部)
+        const sourceIsRelevantCondition = or(
+            eq(cases.source, '教保網'),
+            eq(cases.source, '衛福部裁罰')
+        );
+        
+        // 主關聯性條件：來源相關 或 內容相關
+        const masterRelevancyCondition = or(contentIsRelevantCondition, sourceIsRelevantCondition);
+
+        const whereClause = and(
+            masterRelevancyCondition, // ✅ 所有結果都必須與兒少相關
+            areaCondition,
+            nameCondition
+        );
 
         try {
             const results = await db.select()

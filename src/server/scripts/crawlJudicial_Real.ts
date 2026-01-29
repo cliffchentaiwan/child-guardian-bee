@@ -4,6 +4,7 @@ import puppeteer from 'puppeteer';
 import { db } from '../db';
 import { cases, dataSyncLogs } from '../schema';
 import { eq } from 'drizzle-orm';
+import { invokeLLM } from '../../../server/_core/llm';
 
 const JUDICIAL_URL = 'https://judgment.judicial.gov.tw/FJUD/default.aspx';
 
@@ -107,6 +108,7 @@ export async function crawlJudicial() {
         }
 
         console.log(`   👀 本頁發現 ${newCases.length} 筆，寫入資料庫...`);
+        if (newCases.length > 0) process.stdout.write("      ");
 
         // 寫入 Neon 資料庫
         for (const c of newCases) {
@@ -130,6 +132,23 @@ export async function crawlJudicial() {
                 const existing = await db.select().from(cases).where(eq(cases.id, uniqueId));
                 
                 if (existing.length === 0) {
+                    let summary = '請點擊連結查看詳細判決書內容'; // 預設摘要
+                    try {
+                        process.stdout.write("🧠");
+                        const aiResult = await invokeLLM({
+                            messages: [
+                                { role: 'system', content: '你是一位專業的兒少安全法務專家。請根據使用者提供的判決書標題，用台灣繁體中文，以客觀、簡潔、嚴厲的語氣，推測並總結可能的核心案情摘要。不超過50個字。' },
+                                { role: 'user', content: `判決書標題: ${c.title}` }
+                            ]
+                        });
+                        const aiSummary = aiResult.choices[0].message.content;
+                        if (typeof aiSummary === 'string' && aiSummary.length > 1) {
+                            summary = aiSummary.trim();
+                        }
+                    } catch (aiError: any) {
+                        console.error(`\n⚠️ AI 分析判決書標題失敗，將使用預設描述。錯誤: ${aiError.message}`);
+                    }
+
                     await db.insert(cases).values({
                         id: uniqueId,
                         name: c.title,
@@ -139,19 +158,19 @@ export async function crawlJudicial() {
                         riskTags: '兒少保護,判決書',
                         riskLevel: 'high',
                         source: '司法院判決',
-                        summary: '請點擊連結查看詳細判決書內容',
+                        summary: summary,
                         url: c.href.startsWith('http') ? c.href : `https://judgment.judicial.gov.tw/FJUD/${c.href}`,
                         caseDate: dateStr,
                         crawledAt: new Date(),
                     });
-                    process.stdout.write("+"); 
+                    process.stdout.write("➕"); 
                     totalCount++;
                 } else {
                     process.stdout.write("."); 
                 }
             } catch (err: any) {
                 if (!err.message.includes('unique constraint')) {
-                   // console.error(` 寫入錯: ${err.message}`);
+                   console.error(`\n❌ 寫入DB時出錯: ${err.message}`);
                 }
             }
         }
