@@ -167,7 +167,7 @@ export const appRouter = router({
             ? like(cases.location, `%${area}%`) 
             : undefined;
 
-        const whereClause = and(areaCondition, nameCondition);
+        const whereClause = and(isNotNull(cases.riskTags), areaCondition, nameCondition);
 
         try {
             const results = await db.select()
@@ -191,7 +191,18 @@ export const appRouter = router({
             return {
                 found: results.length > 0,
                 hasMore,
-                results: results.map(c => ({ case: c, matchType: 'normal' })),
+                results: results.map(c => {
+                    let sourceType = 'default';
+                    if (c.source === '教保網') sourceType = 'gov_ece';
+                    else if (c.source === '衛福部裁罰') sourceType = 'gov_crc';
+                    else if (c.source === '媒體報導') sourceType = 'news';
+                    else if (c.source === '司法院判決') sourceType = 'judicial';
+                    
+                    return { 
+                        case: { ...c, sourceType }, 
+                        matchType: 'normal' 
+                    };
+                }),
                 disclaimer
             };
         } catch (error: any) {
