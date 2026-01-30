@@ -181,11 +181,7 @@ export const appRouter = router({
             eq(cases.source, '衛福部裁罰')
         );
         
-        // 主關聯性條件：來源相關 或 內容相關
-        const masterRelevancyCondition = or(contentIsRelevantCondition, sourceIsRelevantCondition);
-
         const whereClause = and(
-            masterRelevancyCondition, // ✅ 所有結果都必須與兒少相關
             areaCondition,
             nameCondition
         );
