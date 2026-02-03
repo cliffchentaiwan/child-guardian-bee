@@ -32,5 +32,12 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    // 🔥【新增】代理伺服器設定，將前端 /api 請求轉發到後端
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
   },
 });

@@ -19,7 +19,7 @@ async function runAll() {
     console.log("🛡️ 任務二：更新兒少裁罰資料 (CRC)...");
     console.log("--------------------------------");
     try {
-        execSync('npx tsx src/server/scripts/crawlCRC_Final.ts', { stdio: 'inherit' });
+        execSync('npx tsx src/server/scripts/crawlCRC_Real.ts', { stdio: 'inherit' });
     } catch (e) { console.log("⚠️ CRC 爬蟲部分失敗，繼續執行..."); }
 
     // 3. 跑 ECE (教育部教保網 - 上帝之手版) 🔥 確認呼叫 Popup 版

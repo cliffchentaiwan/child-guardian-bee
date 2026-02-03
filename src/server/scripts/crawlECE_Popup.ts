@@ -44,20 +44,34 @@ async function crawlECE_Popup() {
     let pageNum = 1;
 
     while (hasNextPage) {
-        const viewButtonsIds = await page.evaluate(() => {
-            const btns = Array.from(document.querySelectorAll('a.btn-primary'));
-            return btns.filter(b => b.innerText.trim() === '檢視').map(b => b.id); 
+        // 🔥【重構】一次性從主列表抓取所有需要的資訊，包括地區
+        const rowsData = await page.evaluate(() => {
+            const rows = Array.from(document.querySelectorAll('table[id*="gvIndex"] tr'));
+            const data = [];
+            // 從 i=1 開始，跳過表頭
+            for (let i = 1; i < rows.length; i++) {
+                const cells = rows[i].querySelectorAll('td');
+                const viewButton = cells[cells.length - 1]?.querySelector('a.btn-primary');
+                if (cells.length >= 3 && viewButton) {
+                    data.push({
+                        location: cells[0].innerText.trim(),
+                        name: cells[1].innerText.trim(),
+                        buttonId: viewButton.id
+                    });
+                }
+            }
+            return data;
         });
 
-        console.log(`\n📄 [第 ${pageNum} 頁] 共有 ${viewButtonsIds.length} 間學校...`);
-        if (viewButtonsIds.length > 0) process.stdout.write("      ");
+        console.log(`\n📄 [第 ${pageNum} 頁] 共有 ${rowsData.length} 間學校...`);
+        if (rowsData.length > 0) process.stdout.write("      ");
 
-        for (let i = 0; i < viewButtonsIds.length; i++) {
-            const btnId = viewButtonsIds[i];
+        for (const row of rowsData) {
+            if (!row.buttonId) continue;
             
             try {
                 const newTargetPromise = new Promise<any>(resolve => browser.once('targetcreated', resolve));
-                await page.evaluate((id) => { document.getElementById(id)?.click(); }, btnId);
+                await page.evaluate((id) => { document.getElementById(id)?.click(); }, row.buttonId);
                 const newTarget = await newTargetPromise;
                 const newPage = await newTarget.page();
 
@@ -66,27 +80,27 @@ async function crawlECE_Popup() {
                     continue;
                 }
                 
-                await newPage.bringToFront(); 
+                await newPage.bringToFront();
                 try { await newPage.waitForSelector('table', { timeout: 5000 }); } catch(e) {}
                 
-                const penalties = await newPage.evaluate(() => {
+                const penalties = await newPage.evaluate((rowName: string) => {
                     const results: any[] = [];
                     const titleText = document.querySelector('h3, span#lblTitle, .title')?.textContent || '';
-                    const nameFromTitle = titleText.replace('裁罰結果', '').trim();
-                    document.querySelectorAll('table tr').forEach(row => {
-                        const cells = Array.from(row.querySelectorAll('td'));
+                    const nameFromTitle = titleText.replace('裁罰結果', '').trim() || rowName;
+                    
+                    document.querySelectorAll('table tr').forEach(tr => {
+                        const cells = Array.from(tr.querySelectorAll('td'));
                         if (cells.length >= 6) {
                             const txtDate = cells[0]?.innerText?.trim();
-                            const txtName = cells[1]?.innerText?.trim() || nameFromTitle;
                             const txtReason = cells[4]?.innerText?.trim(); 
                             const txtContent = cells[6]?.innerText?.trim(); 
                             if (txtDate && /\d/.test(txtDate)) {
-                                results.push({ date: txtDate, name: txtName, reason: txtReason, content: txtContent });
+                                results.push({ date: txtDate, name: nameFromTitle, reason: txtReason, content: txtContent });
                             }
                         }
                     });
                     return results;
-                });
+                }, row.name);
 
                 if (penalties.length === 0) {
                    process.stdout.write("▫️");
@@ -123,6 +137,7 @@ async function crawlECE_Popup() {
                                 console.error(`\n⚠️ AI 分析失敗 (${item.name})，將使用原始描述。錯誤: ${aiError.message}`);
                             }
 
+                            // 🔥【修正】使用從主列表頁面抓取到的 row.location
                             await db.insert(cases).values({
                                 id: uniqueId,
                                 maskedName: item.name,
@@ -130,7 +145,7 @@ async function crawlECE_Popup() {
                                 originalName: item.name,
                                 role: '幼兒園',
                                 riskTags: '教育部裁罰',
-                                location: '全台', 
+                                location: row.location, 
                                 caseDate: finalDate,
                                 description: description,
                                 summary: summary,

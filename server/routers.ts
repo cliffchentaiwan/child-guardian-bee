@@ -183,21 +183,54 @@ export const appRouter = router({
         
         const whereClause = and(
             areaCondition,
-            nameCondition
+            nameCondition,
+            or(
+                sourceIsRelevantCondition,
+                contentIsRelevantCondition
+            )
         );
 
         try {
             const results = await db.select()
                 .from(cases)
                 .where(whereClause)
-                .limit(limit)
-                .offset(offset)
-                .orderBy(desc(cases.caseDate));
+                .orderBy(desc(cases.caseDate))
+                // 🔥 多拉一點資料，以確保分組後數量足夠
+                .limit(limit * 2) 
+                .offset(offset);
 
-            const hasMore = results.length === limit;
+            // 🔥【升級】新聞聚合邏輯 2.0 -> 分組
+            const storyIdMap = new Map<string, any>();
+            const processedResults: any[] = [];
+
+            for (const result of results) {
+                // 如果是新聞且有 storyId
+                if (result.source === '媒體報導' && result.storyId) {
+                    const storyId = result.storyId;
+
+                    // 如果這是此 storyId 第一次出現
+                    if (!storyIdMap.has(storyId)) {
+                        // 將其設為主文章，並初始化 relatedArticles 陣列
+                        result.relatedArticles = [];
+                        storyIdMap.set(storyId, result);
+                        processedResults.push(result);
+                    } else {
+                        // 如果已存在主文章，將此篇加入 relatedArticles
+                        const primaryArticle = storyIdMap.get(storyId);
+                        primaryArticle.relatedArticles.push(result);
+                    }
+                } else {
+                    // 非新聞資料直接加入
+                    processedResults.push(result);
+                }
+            }
+            
+            // 由於我們先拉了較多的資料，現在進行分頁
+            const paginatedResults = processedResults.slice(0, limit);
+            const hasMore = processedResults.length > limit;
 
             let disclaimer = undefined;
-            if (results.length === 0 && name) {
+            if (paginatedResults.length === 0 && name) {
                 if (hasConverted) {
                     disclaimer = `關於「${name}」及其同義詞（如：${searchTerms[1]}），目前未發現違規紀錄。`;
                 } else {
@@ -206,17 +239,26 @@ export const appRouter = router({
             }
 
             return {
-                found: results.length > 0,
+                found: paginatedResults.length > 0,
                 hasMore,
-                results: results.map(c => {
+                results: paginatedResults.map(c => {
                     let sourceType = 'default';
                     if (c.source === '教保網') sourceType = 'gov_ece';
                     else if (c.source === '衛福部裁罰') sourceType = 'gov_crc';
                     else if (c.source === '媒體報導') sourceType = 'news';
                     else if (c.source === '司法院判決') sourceType = 'judicial';
                     
+                    const caseData = { ...c, sourceType };
+                    // 將 relatedArticles 也轉換
+                    if (c.relatedArticles) {
+                        caseData.relatedArticles = c.relatedArticles.map((rel: any) => ({
+                            ...rel,
+                            sourceType: 'news'
+                        }));
+                    }
+
                     return { 
-                        case: { ...c, sourceType }, 
+                        case: caseData, 
                         matchType: 'normal' 
                     };
                 }),
@@ -252,12 +294,18 @@ export const appRouter = router({
                 createdAt: new Date(),
             });
 
-            await sendNotificationEmail({
-                suspectName: input.suspectName,
-                location: input.location,
-                description: input.description,
-                reporterIp
-            });
+            // 🔥【關鍵修正】加上 await，確保信寄出去才回傳成功
+            // 這裡我們用一個 try-catch 包住寄信，避免寄信失敗導致前端顯示申報失敗
+            try {
+                await sendNotificationEmail({
+                    suspectName: input.suspectName,
+                    location: input.location,
+                    description: input.description,
+                    reporterIp
+                });
+            } catch (emailErr) {
+                console.error("❌ 寄信過程發生錯誤，但申報資料已存檔:", emailErr);
+            }
 
             return { success: true, message: "通報已送出，感謝您的勇敢發聲！" };
         } catch (error: any) {

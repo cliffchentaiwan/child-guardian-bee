@@ -14,7 +14,8 @@ import {
   Info,
   ShieldCheck, 
   Scale,
-  AlertTriangle 
+  AlertTriangle,
+  BookCopy
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -294,6 +295,7 @@ export default function Home() {
 // ResultCard Component
 function ResultCard({ result, index }: { result: any, index: number }) {
   const { case: caseData } = result;
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // 1. 決定來源類型 Key
   let sourceTypeKey = 'default';
@@ -343,6 +345,8 @@ function ResultCard({ result, index }: { result: any, index: number }) {
       if (sourceTypeKey === 'news') return 'bg-blue-50 text-blue-600 border-blue-200';
       return 'bg-slate-50 text-slate-600 border-slate-200';
   };
+  
+  const hasRelatedArticles = caseData.relatedArticles && caseData.relatedArticles.length > 0;
 
   return (
     <motion.div
@@ -350,7 +354,7 @@ function ResultCard({ result, index }: { result: any, index: number }) {
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.05 }}
     >
-      <Card className={`border-l-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-md ${borderClass} bg-white`}>
+      <Card className={`border-l-4 transition-all duration-200 ${borderClass} bg-white overflow-hidden`}>
         <CardContent className="p-5">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
@@ -379,17 +383,18 @@ function ResultCard({ result, index }: { result: any, index: number }) {
                 ))}
               </div>
 
-              {caseData.description && (
+              {caseData.summary && (
                 <div className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
-                   {caseData.description}
+                   {caseData.summary}
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col justify-end items-end gap-2 shrink-0 md:w-32">
-               {caseData.sourceLink && caseData.sourceLink.startsWith('http') && (
+            <div className="flex flex-col justify-between items-end gap-2 shrink-0 md:w-32">
+              <div>
+               {caseData.url && caseData.url.startsWith('http') && (
                   <a 
-                    href={caseData.sourceLink} 
+                    href={caseData.url} 
                     target="_blank" 
                     rel="noopener noreferrer" 
                     className="flex items-center gap-1 text-xs font-bold text-blue-500 hover:text-blue-700 hover:underline mt-2 md:mt-0"
@@ -397,8 +402,51 @@ function ResultCard({ result, index }: { result: any, index: number }) {
                     查看來源 <ExternalLink className="w-3 h-3"/>
                   </a>
                )}
+               </div>
+
+              {/* 🔥 相關報導按鈕 */}
+              {hasRelatedArticles && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-xs h-auto py-1 px-2 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                >
+                  <BookCopy className="w-3 h-3 mr-1" />
+                  {caseData.relatedArticles.length} 篇相關報導
+                </Button>
+              )}
             </div>
           </div>
+
+          {/* 🔥 相關報導展開區域 */}
+          {isExpanded && hasRelatedArticles && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0, marginTop: 0 }}
+              animate={{ height: 'auto', opacity: 1, marginTop: '1rem' }}
+              exit={{ height: 0, opacity: 0, marginTop: 0 }}
+              className="pt-4 border-t border-slate-100 overflow-hidden"
+            >
+              <h4 className="font-bold text-sm text-slate-500 mb-3">其他相關報導來源：</h4>
+              <ul className="space-y-2">
+                {caseData.relatedArticles.map((article: any) => (
+                  <li key={article.id} className="flex items-center justify-between text-sm group">
+                    <span className="text-slate-700 group-hover:text-honey-dark transition-colors">
+                      {article.maskedName || '媒體報導'}
+                    </span>
+                    <a 
+                      href={article.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs font-semibold text-blue-500 hover:underline"
+                    >
+                      查看原文 <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
+          )}
         </CardContent>
       </Card>
     </motion.div>

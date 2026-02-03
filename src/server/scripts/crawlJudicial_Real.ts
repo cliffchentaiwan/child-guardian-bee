@@ -110,6 +110,19 @@ export async function crawlJudicial() {
         console.log(`   👀 本頁發現 ${newCases.length} 筆，寫入資料庫...`);
         if (newCases.length > 0) process.stdout.write("      ");
 
+// 台灣縣市列表，用於從名稱中解析地區
+const TAIWAN_CITIES = [
+  '臺北市', '新北市', '桃園市', '臺中市', '臺南市', '高雄市',
+  '基隆市', '新竹市', '嘉義市',
+  '新竹縣', '苗栗縣', '彰化縣', '南投縣', '雲林縣', '嘉義縣', '屏東縣', '宜蘭縣', '花蓮縣', '臺東縣',
+  '澎湖縣', '金門縣', '連江縣',
+  // 簡稱
+  '台北', '新北', '桃園', '台中', '台南', '高雄',
+  '基隆', '新竹', '嘉義', '苗栗', '彰化', '南投', '雲林', '屏東', '宜蘭', '花蓮', '台東', '澎湖', '金門'
+];
+
+// ... (省略部分程式碼)
+
         // 寫入 Neon 資料庫
         for (const c of newCases) {
             try {
@@ -149,12 +162,27 @@ export async function crawlJudicial() {
                         console.error(`\n⚠️ AI 分析判決書標題失敗，將使用預設描述。錯誤: ${aiError.message}`);
                     }
 
+                    // 🔥【修正】從標題解析地區
+                    let location = '全台'; // 預設值
+                    for (const city of TAIWAN_CITIES) {
+                        if (c.title.includes(city)) {
+                            // 將簡稱轉換為全名，例如 "台中" -> "臺中市"
+                            if (city.endsWith('市') || city.endsWith('縣')) {
+                                location = city;
+                            } else {
+                                const fullName = TAIWAN_CITIES.find(c => c.startsWith(city) && (c.endsWith('市') || c.endsWith('縣')));
+                                location = fullName || city;
+                            }
+                            break; 
+                        }
+                    }
+
                     await db.insert(cases).values({
                         id: uniqueId,
                         name: c.title,
                         maskedName: c.title,
                         originalName: c.title,
-                        location: '全國',
+                        location: location,
                         riskTags: '兒少保護,判決書',
                         riskLevel: 'high',
                         source: '司法院判決',

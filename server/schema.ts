@@ -16,12 +16,14 @@ export const cases = sqliteTable('cases', {
   riskTags: text('risk_tags'),
   sourceType: text('source_type'),
   sourceLink: text('source_link'),
+  storyId: text('story_id'),
   verified: integer('verified', { mode: 'boolean' }).default(false),
   createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 }, (table) => ({
   nameIdx: index('name_idx').on(table.name),
   originalNameIdx: index('original_name_idx').on(table.originalName),
   dateIdx: index('date_idx').on(table.caseDate),
+  storyIdx: index('story_idx').on(table.storyId),
 }));
 
 // 2. 同步紀錄表

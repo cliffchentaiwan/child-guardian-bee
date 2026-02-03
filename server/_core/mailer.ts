@@ -1,17 +1,10 @@
 // server/_core/mailer.ts
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend'; // 🔥【修正】改用 Resend 寄信
+import { ENV } from './env'; // 導入 ENV 來取環境變數
 
-// 設定郵件傳送器 (使用 Gmail 或其他 SMTP)
+// 初始化 Resend 客戶端
 // 如果沒有環境變數，會自動切換為「僅在終端機顯示日誌」模式，避免報錯
-const transporter = process.env.GMAIL_USER && process.env.GMAIL_PASS
-  ? nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
-      },
-    })
-  : null;
+const resend = ENV.resendApiKey ? new Resend(ENV.resendApiKey) : null;
 
 interface EmailData {
   suspectName: string;
@@ -20,21 +13,31 @@ interface EmailData {
   reporterIp: string;
 }
 
-export async function sendNotificationEmail(data: EmailData) {
+export async function sendNotificationEmail(data: EmailData): Promise<boolean> {
   const { suspectName, location, description, reporterIp } = data;
 
   console.log(`📨 [系統通知] 收到新通報！對象：${suspectName}`);
 
-  // 如果沒有設定 SMTP，就只印出 Log
-  if (!transporter) {
-    console.log("⚠️ 未設定 GMAIL_USER/PASS，跳過寄信。僅記錄於 Log。");
-    return;
+  // 🔥【最終偵錯日誌】讓程式告訴我們它讀到了什麼
+  const apiKey = ENV.resendApiKey;
+  const senderEmail = ENV.resendSenderEmail;
+  const adminEmail = ENV.adminEmail || senderEmail;
+  
+  console.log("\n📧 [郵件系統診斷]");
+  console.log(` - RESEND_API_KEY: ${apiKey ? `✅ 已讀取 (前4碼: ${apiKey.substring(0, 4)}...)` : '❌ 未設定或空白'}`);
+  console.log(` - RESEND_SENDER_EMAIL (寄件人): ${senderEmail ? `✅ ${senderEmail}` : '❌ 未設定或空白'}`);
+  console.log(` - ADMIN_EMAIL (收件人): ${adminEmail ? `✅ ${adminEmail}` : '❌ 未設定或空白'}`);
+
+  // 如果沒有設定 Resend API 金鑰或寄件人 Email，就提前返回
+  if (!resend || !senderEmail) {
+    console.error("⛔ 嚴重錯誤：無法寄信，請檢查 .env 檔案中的 RESEND_API_KEY 和 RESEND_SENDER_EMAIL 設定。");
+    return false;
   }
 
   try {
-    const mailOptions = {
-      from: `"兒少守護小蜂" <${process.env.GMAIL_USER}>`,
-      to: process.env.ADMIN_EMAIL || process.env.GMAIL_USER, // 寄給管理員
+    const data = await resend.emails.send({
+      from: `兒少守護小蜂 <${senderEmail}>`,
+      to: adminEmail,
       subject: `🚨 [新通報] 發現潛在風險：${suspectName}`,
       html: `
         <h2>⚠️ 收到新的違規通報</h2>
@@ -48,12 +51,17 @@ export async function sendNotificationEmail(data: EmailData) {
         <p><small>通報來源 IP: ${reporterIp}</small></p>
         <p><small>通報時間: ${new Date().toLocaleString()}</small></p>
       `,
-    };
+    });
 
-    await transporter.sendMail(mailOptions);
-    console.log("✅ 通報信件已寄出！");
+    if (data.error) {
+      console.error('❌ Resend API 拒絕發送:', JSON.stringify(data.error, null, 2));
+      return false;
+    }
+
+    console.log('✅ 通報信件已寄出！ Message ID:', data.data?.id);
+    return true;
   } catch (error) {
-    console.error("❌ 寄信失敗:", error);
-    // 不拋出錯誤，避免影響使用者介面
+    console.error("❌ 寄信程式碼崩潰:", error);
+    return false;
   }
 }

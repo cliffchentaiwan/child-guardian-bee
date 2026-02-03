@@ -5,6 +5,8 @@ import { db } from '../db';
 import { cases, dataSyncLogs } from '../schema';
 import { eq } from 'drizzle-orm';
 import { invokeLLM } from '../../../server/_core/llm';
+import { fileURLToPath } from 'url'; // 🔥【修正】導入 fileURLToPath 模組
+
 
 // 🔍 除錯用：確認檔案被載入 (但不會自動執行)
 console.log("📂 [系統] 載入新聞爬蟲模組 crawlNews_Final.ts (等待呼叫中)...");
@@ -64,40 +66,80 @@ async function crawlNewsFinal() {
 
             console.log(`   👀 原始抓到 ${originalCount} 筆，經嚴格驗證後剩 ${items.length} 筆有效新聞`);
 
+const TAIWAN_CITIES = [
+  '臺北市', '新北市', '桃園市', '臺中市', '臺南市', '高雄市',
+  '基隆市', '新竹市', '嘉義市',
+  '新竹縣', '苗栗縣', '彰化縣', '南投縣', '雲林縣', '嘉義縣', '屏東縣', '宜蘭縣', '花蓮縣', '臺東縣',
+  '澎湖縣', '金門縣', '連江縣',
+  // 簡稱
+  '台北', '新北', '桃園', '台中', '台南', '高雄',
+  '基隆', '新竹', '嘉義', '苗栗', '彰化', '南投', '雲林', '屏東', '宜蘭', '花蓮', '台東', '澎湖', '金門'
+];
+
+// ... (省略部分輔助函式) ...
+
             // 寫入 DB (Neon 版)
             let savedCount = 0;
             for (const item of items) {
                 try {
-                    // ID 產生與截斷
                     const uniqueId = `NEWS_${item.link}`.substring(0, 255); 
-                    
-                    // 檢查是否存在
                     const existing = await db.select().from(cases).where(eq(cases.id, uniqueId));
                     
                     if (existing.length === 0) {
-                        let summary = item.title; // 預設摘要為標題
-                        try {
-                            process.stdout.write("🧠");
-                            const aiResult = await invokeLLM({
-                                messages: [
-                                    { role: 'system', content: '你是一位專業的兒少安全法務專家。請根據使用者提供的新聞標題，用台灣繁體中文，以客觀、簡潔、嚴厲的語氣，濃縮成一句話的摘要，指出最關鍵的人事時地物和潛在風險。不超過50個字。' },
-                                    { role: 'user', content: `新聞標題: ${item.title}\n新聞片段: ${item.snippet}` }
-                                ]
-                            });
-                            const aiSummary = aiResult.choices[0].message.content;
-                            if (typeof aiSummary === 'string' && aiSummary.length > 1) {
-                                summary = aiSummary.trim();
+                        let summary = item.title;
+                        let location = '網路'; // 預設地點
+
+                        // 🔥【規則優先】從標題解析地點
+                        for (const city of TAIWAN_CITIES) {
+                            if (item.title.includes(city)) {
+                                if (city.endsWith('市') || city.endsWith('縣')) {
+                                    location = city;
+                                } else {
+                                    const fullName = TAIWAN_CITIES.find(c => c.startsWith(city) && (c.endsWith('市') || c.endsWith('縣')));
+                                    location = fullName || city;
+                                }
+                                break; 
                             }
-                        } catch (aiError: any) {
-                            console.error(`\n⚠️ AI 分析新聞失敗，將使用原始標題。錯誤: ${aiError.message}`);
                         }
+
+                        // 🔥【AI輔助】如果規則找不到地點，則要求 AI 一併分析 (AI 功能已禁用)
+                        // try {
+                        //     process.stdout.write("🧠");
+                        //     const prompt = location === '網路' 
+                        //         ? `請根據此新聞內容，完成兩件事：1. 濃縮成一句話的摘要。 2. 識別事件最主要的發生縣市(例如：臺北市、新北市)，如果沒有明確縣市則回傳「網路」。請嚴格用 {"summary": "摘要", "location": "縣市"} 的 JSON 格式回傳。新聞標題: ${item.title}，新聞片段: ${item.snippet}`
+                        //         : `請根據此新聞內容，濃縮成一句話的摘要。新聞標題: ${item.title}，新聞片段: ${item.snippet}`;
+
+                        //     const aiResult = await invokeLLM({
+                        //         messages: [
+                        //             { role: 'system', content: '你是一位專業的兒少安全法務專家，擅長分析新聞並提取關鍵資訊。' },
+                        //             { role: 'user', content: prompt }
+                        //         ]
+                        //     });
+
+                        //     let aiText = aiResult.choices[0].message.content || '';
+                            
+                        //     if (location === '網路' && aiText.includes('{')) {
+                        //         // 嘗試解析 JSON
+                        //         const jsonMatch = aiText.match(/\{.*\}/);
+                        //         if (jsonMatch) {
+                        //             const parsed = JSON.parse(jsonMatch[0]);
+                        //             summary = parsed.summary || summary;
+                        //             location = parsed.location || '網路';
+                        //         }
+                        //     } else if (aiText) {
+                        //         summary = aiText.trim();
+                        //     }
+
+                        // } catch (aiError: any) {
+                        //     console.error(`\n⚠️ AI 分析新聞失敗，將使用原始標題。錯誤: ${aiError.message}`);
+                        // }
 
                         await db.insert(cases).values({
                             id: uniqueId,
                             maskedName: item.source || '網路新聞',
                             name: item.title,
                             originalName: item.title,
-                            location: '網路',
+                            location: location,
                             riskTags: `媒體報導,${keyword}`,
                             riskLevel: 'medium',
                             source: '媒體報導',
@@ -112,7 +154,9 @@ async function crawlNewsFinal() {
                         process.stdout.write(".");
                     }
                 } catch (e: any) { 
-                    // 忽略重複鍵錯誤
+                    if (!e.message.includes('unique constraint')) {
+                       console.error(`\n❌ 寫入DB時出錯: ${e.message}`);
+                    }
                 }
             }
             console.log(""); 
@@ -200,3 +244,8 @@ async function scrapeGoogle(page: any, keyword: string) {
 export { crawlNewsFinal };
 
 // 🛑 移除了底部的自動執行區塊，防止 Render 部署時伺服器當機
+
+// 確保可以被 import 也可以直接執行
+if (import.meta.url.startsWith('file://') && process.argv[1] === fileURLToPath(import.meta.url)) {
+    crawlNewsFinal();
+}
