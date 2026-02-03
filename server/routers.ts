@@ -169,7 +169,12 @@ export const appRouter = router({
 
         // 🧠 全新搜尋策略：主關聯性篩選器
         // 條件1: 內容本身與兒少相關 (適用於新聞、司法等)
-        const childSafetyKeywords = ['兒', '童', '幼', '學生', '教保', '校', '師', '教練', '學童', '學員', '嬰'];
+        const childSafetyKeywords = [
+            '性剝削', '性騷', '猥褻', '性侵', '偷拍', '妨害性自主',
+            '虐童', '虐待', '霸凌', '體罰', '不當管教', '呼巴掌', '餵藥', '施暴', '羞辱',
+            '幼兒園', '托嬰', '保母', '教保', '狼師', '補習班', '園長', '教練',
+            '違規', '開罰', '裁罰', '停業', '撤照', '起訴', '判刑', '解聘', '不適任'
+        ];
         const contentIsRelevantCondition = or(
             ...childSafetyKeywords.map(keyword => like(cases.description || '', `%${keyword}%`)),
             ...childSafetyKeywords.map(keyword => like(cases.name || '', `%${keyword}%`))

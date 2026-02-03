@@ -207,7 +207,7 @@ async function crawlCRC() {
 }
 
 // 確保可以被 import 也可以直接執行
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1]?.endsWith('crawlCRC_Real.ts')) {
     crawlCRC();
 }
 

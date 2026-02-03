@@ -246,6 +246,6 @@ const TAIWAN_CITIES = [
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1]?.endsWith('crawlJudicial_Real.ts')) {
     crawlJudicial().then(() => process.exit(0));
 }

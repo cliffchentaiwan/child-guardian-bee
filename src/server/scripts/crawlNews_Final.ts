@@ -246,6 +246,6 @@ export { crawlNewsFinal };
 // 🛑 移除了底部的自動執行區塊，防止 Render 部署時伺服器當機
 
 // 確保可以被 import 也可以直接執行
-if (import.meta.url.startsWith('file://') && process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1]?.endsWith('crawlNews_Final.ts')) {
     crawlNewsFinal();
 }

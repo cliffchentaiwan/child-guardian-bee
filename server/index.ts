@@ -8,10 +8,6 @@ import { createServer as createViteServer } from 'vite';
 import { startCronJobs } from './_core/cron'; 
 
 async function startServer() {
-  // 🐞 [偵錯日誌] 伺服器啟動時，印出資料庫連線 URL，以確認是否正確
-  console.log('✅ [偵錯] DATABASE_URL:', process.env.DATABASE_URL ? `${process.env.DATABASE_URL.substring(0, 40)}...` : 'Not Set!');
-  console.log('✅ [偵錯] process.env.RESEND_API_KEY:', process.env.RESEND_API_KEY ? `${process.env.RESEND_API_KEY.substring(0, 4)}...` : 'Not Set!'); // <-- 新增的偵錯日誌
-
   const app = express();
 
   // 開啟 CORS

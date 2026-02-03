@@ -218,6 +218,6 @@ async function crawlECE_Popup() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1]?.endsWith('crawlECE_Popup.ts')) {
     crawlECE_Popup();
 }
