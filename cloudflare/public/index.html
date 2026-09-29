@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>守護小蜂｜機構查詢測試版</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<body><header><a href="/" class="brand">✿ 守護小蜂</a><span>資料串接測試版</span></header>
+<main><section class="intro"><p class="eyebrow">送孩子出門前，多一份了解</p><h1>先找到機構，<br>再核對公開資訊。</h1><p>用名稱查找幼兒園、補習班，核對地址與官方資料來源。免註冊、免登入。</p></section>
+<aside class="notice"><strong>目前僅提供機構名錄</strong><p>裁罰、判決與老師姓名查詢尚未接入。名錄登載不代表安全認證；未查到也不代表未立案或安全。</p></aside>
+<form id="search"><label for="q">機構名稱</label><div class="search-row"><input id="q" name="q" placeholder="輸入幼兒園或補習班名稱" required minlength="2" maxlength="80"><button type="submit">查詢機構</button></div><div class="filters"><label>類別<select name="kind"><option value="">全部類別</option><option>幼兒園</option><option>補習班</option></select></label><label>縣市<select name="city" id="city"><option value="">全部縣市</option></select></label></div></form>
+<section aria-live="polite" aria-atomic="false"><p id="message">請輸入名稱開始查詢。補習班目前僅涵蓋臺北市。</p><div id="results"></div><button id="more" hidden>顯示更多</button></section>
+<section class="coverage"><h2>我們查了哪些資料？</h2><p>「最近取得」是小蜂下載時間，與來源資料的學年度、發布時間不同。</p><div id="sources">正在確認資料狀態…</div></section>
+<footer>本工具提供第一層資訊核對，無法保證人員或場所安全。<br>資料疑義：<a href="mailto:ecojoyapp@gmail.com">ecojoyapp@gmail.com</a><p>資料採政府資料開放授權條款第 1 版；來源連結列於各筆結果。</p></footer></main></body></html>

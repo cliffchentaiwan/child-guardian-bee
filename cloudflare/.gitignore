@@ -1,0 +1,5 @@
+.wrangler/
+.dev.vars*
+.env*
+audit-data/
+wrangler.jsonc

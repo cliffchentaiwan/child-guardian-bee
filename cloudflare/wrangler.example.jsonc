@@ -1,0 +1,15 @@
+{
+  "name": "child-guardian-bee-pilot",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-09-28",
+  "workers_dev": true,
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "child-guardian-bee-pilot",
+    "database_id": "REPLACE_WITH_NEW_PILOT_DATABASE_ID",
+    "migrations_dir": "migrations"
+  }],
+  "triggers": { "crons": [] },
+  "vars": { "SYNC_ENABLED": "false" }
+}
