@@ -1,0 +1,11 @@
+{
+  "name": "child-guardian-bee-cloudflare-pilot",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "audit": "node scripts/audit.mjs",
+    "preview": "node scripts/preview.mjs"
+  }
+}
